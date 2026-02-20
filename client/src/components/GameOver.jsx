@@ -1,0 +1,33 @@
+import { useSocket } from '../useSocket';
+
+export default function GameOver({ state }) {
+  const { emit } = useSocket();
+  const me = state.you;
+  if (!state.winner) return null;
+
+  const lastLog = state.log[state.log.length - 1];
+  const reason = lastLog?.cardType === 'assassin' ? ' (Assassin)' : '';
+
+  return (
+    <div className="overlay">
+      <div className="overlay-content">
+        <h2 className={`winner-text team-${state.winner}`}>
+          {state.winner.toUpperCase()} TEAM WINS{reason}
+        </h2>
+        {me.isHost && (
+          <>
+            <button className="btn btn-primary" onClick={() => emit('play-again')}>
+              Play Again
+            </button>
+            <button className="btn btn-secondary" onClick={() => emit('play-again')}>
+              Back to Lobby
+            </button>
+          </>
+        )}
+        {!me.isHost && (
+          <p className="waiting-host">Waiting for host...</p>
+        )}
+      </div>
+    </div>
+  );
+}
