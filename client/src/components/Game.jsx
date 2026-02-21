@@ -6,6 +6,7 @@ import TeamPanel from './TeamPanel';
 import GameLog from './GameLog';
 import GameOver from './GameOver';
 import Chat from './Chat';
+import RoundSplash from './RoundSplash';
 
 function MobileChatOverlay({ isOpen, onClose, activeTab, setActiveTab, children }) {
   if (!isOpen) return null;
@@ -110,6 +111,7 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
 
   return (
     <div className="screen game-screen duet-game">
+      <RoundSplash gameState={gameState} />
       <div className="game-top-bar">
         <div className="top-bar-row">
           <span className="room-code-badge">ROOM {gameState.roomCode}</span>
@@ -332,6 +334,7 @@ export default function Game() {
 
   return (
     <div className="screen game-screen">
+      <RoundSplash gameState={gameState} />
       <div className="game-top-bar">
         <div className="top-bar-row">
           <span className="room-code-badge">ROOM {gameState.roomCode}</span>

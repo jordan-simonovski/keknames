@@ -375,6 +375,57 @@ input:focus, textarea:focus { border-color: var(--gold); }
   100% { transform: rotate(-2deg) scale(1); }
 }
 
+/* --- Round Splash --- */
+.round-splash {
+  position: fixed; inset: 0; z-index: 150;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.85);
+  animation: splashBg 2.4s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes splashBg {
+  0%   { opacity: 0; }
+  8%   { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.round-splash-img {
+  width: min(85vw, 480px); border-radius: 12px;
+  animation: splashSlam 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) forwards,
+             splashShake 0.3s 0.45s ease-in-out,
+             splashExit 0.5s 1.9s ease-in forwards;
+  filter: drop-shadow(0 0 40px rgba(243, 156, 18, 0.6));
+}
+@keyframes splashSlam {
+  0%   { transform: scale(2.5) rotate(-3deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes splashShake {
+  0%, 100% { transform: translateX(0); }
+  20%  { transform: translateX(-8px) rotate(-0.5deg); }
+  40%  { transform: translateX(8px) rotate(0.5deg); }
+  60%  { transform: translateX(-5px); }
+  80%  { transform: translateX(5px); }
+}
+@keyframes splashExit {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+.round-splash-text {
+  position: absolute; bottom: 18%;
+  font-size: clamp(1.8rem, 6vw, 3.5rem); font-weight: 900;
+  letter-spacing: 6px; color: #fff;
+  text-shadow: 0 0 20px var(--gold), 0 0 60px rgba(243,156,18,0.5), 3px 3px 0 rgba(0,0,0,0.7);
+  animation: textPunch 0.4s 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both,
+             splashExit 0.5s 1.9s ease-in forwards;
+}
+@keyframes textPunch {
+  0%   { transform: scale(0) translateY(30px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
 /* --- Animations --- */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
