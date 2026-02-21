@@ -132,6 +132,13 @@ input:focus, textarea:focus { border-color: var(--gold); }
 }
 .lobby-header h2 { font-size: 1.5rem; }
 .room-code { color: var(--gold); letter-spacing: 4px; font-size: 1.8rem; }
+.btn-copy-link {
+  margin-left: 12px; vertical-align: middle;
+  font-size: 0.75rem; padding: 4px 10px;
+}
+.join-invite {
+  text-align: center; color: var(--gold); font-size: 1.1rem; padding: 4px 0;
+}
 .host-controls { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .mode-toggle { display: flex; gap: 8px; }
 .wordlist-section { margin-top: 4px; }

@@ -64,8 +64,12 @@ function FloatingBackdrop() {
 export default function Landing() {
   const { createRoom, joinRoom } = useSocket();
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('room') || '').toUpperCase().slice(0, 4);
+  });
   const [err, setErr] = useState('');
+  const hasRoomFromUrl = code.length > 0;
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -92,26 +96,40 @@ export default function Landing() {
             maxLength={20}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            onKeyDown={(e) => e.key === 'Enter' && (hasRoomFromUrl ? handleJoin() : handleCreate())}
+            autoFocus={hasRoomFromUrl}
             autoComplete="off"
           />
-          <button className="btn btn-primary" onClick={handleCreate}>
-            Create Room
-          </button>
-          <div className="join-row">
-            <input
-              type="text"
-              placeholder="ROOM CODE"
-              maxLength={4}
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-              autoComplete="off"
-            />
-            <button className="btn btn-secondary" onClick={handleJoin}>
-              Join
-            </button>
-          </div>
+          {hasRoomFromUrl ? (
+            <>
+              <div className="join-invite">
+                Joining room <strong>{code}</strong>
+              </div>
+              <button className="btn btn-primary" onClick={handleJoin}>
+                Join Room
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" onClick={handleCreate}>
+                Create Room
+              </button>
+              <div className="join-row">
+                <input
+                  type="text"
+                  placeholder="ROOM CODE"
+                  maxLength={4}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                  autoComplete="off"
+                />
+                <button className="btn btn-secondary" onClick={handleJoin}>
+                  Join
+                </button>
+              </div>
+            </>
+          )}
           {err && <p className="error-msg">{err}</p>}
         </div>
       </div>

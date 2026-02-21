@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useSocket } from '../useSocket';
 
 function PlayerCard({ player, canControl, myId, emit }) {
@@ -54,8 +54,23 @@ function PlayerCard({ player, canControl, myId, emit }) {
 export default function Lobby() {
   const { lobbyState, myId, emit, wordlistStatus } = useSocket();
   const [customWords, setCustomWords] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = useCallback(() => {
+    if (!lobbyState) return;
+    const url = `${window.location.origin}?room=${lobbyState.code}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [lobbyState]);
 
   if (!lobbyState) return null;
+
+  const currentUrlRoom = new URLSearchParams(window.location.search).get('room');
+  if (currentUrlRoom !== lobbyState.code) {
+    window.history.replaceState(null, '', `?room=${lobbyState.code}`);
+  }
 
   const isHost = lobbyState.hostId === myId;
   const reds = lobbyState.players.filter((p) => p.team === 'red');
@@ -76,7 +91,12 @@ export default function Lobby() {
     <div className="screen lobby-screen">
       <div className="lobby-container">
         <div className="lobby-header">
-          <h2>Room: <span className="room-code">{lobbyState.code}</span></h2>
+          <h2>
+            Room: <span className="room-code">{lobbyState.code}</span>
+            <button className="btn btn-small btn-copy-link" onClick={copyLink}>
+              {copied ? 'Copied' : 'Copy Link'}
+            </button>
+          </h2>
           {isHost && (
             <div className="host-controls">
               <div className="mode-toggle">
