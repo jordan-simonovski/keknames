@@ -51,11 +51,14 @@ export function useSounds(muted) {
 }
 
 export function useGameSounds(gameState, prevRef, play) {
+  const soundedLogLen = useRef(0);
+
   useEffect(() => {
     if (!gameState) return;
     const prev = prevRef.current;
     prevRef.current = gameState;
     if (!prev) {
+      soundedLogLen.current = gameState.log?.length ?? 0;
       play('round');
       return;
     }
@@ -77,22 +80,19 @@ export function useGameSounds(gameState, prevRef, play) {
       return;
     }
 
-    const prevRevealed = prev.cards?.filter((c) => c.revealed).length ?? 0;
-    const nowRevealed = gameState.cards?.filter((c) => c.revealed).length ?? 0;
-    if (nowRevealed > prevRevealed) {
-      if (gameState.mode === 'duet') {
-        const lastLog = gameState.log?.[gameState.log.length - 1];
-        if (lastLog && 'cardType' in lastLog) {
+    const logLen = gameState.log?.length ?? 0;
+    if (logLen > soundedLogLen.current) {
+      soundedLogLen.current = logLen;
+      const lastLog = gameState.log[logLen - 1];
+      if (lastLog && 'cardType' in lastLog) {
+        if (gameState.mode === 'duet') {
           play(lastLog.cardType === 'green' ? 'correct' : 'wrong');
-        }
-      } else {
-        const lastLog = gameState.log?.[gameState.log.length - 1];
-        if (lastLog && 'cardType' in lastLog) {
+        } else {
           const myTeam = gameState.you?.team;
           play(lastLog.cardType === myTeam ? 'correct' : 'wrong');
         }
+        return;
       }
-      return;
     }
 
     if (prev.currentTurn !== gameState.currentTurn ||

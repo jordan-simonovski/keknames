@@ -69,7 +69,10 @@ export default function Landing() {
     return (params.get('room') || '').toUpperCase().slice(0, 4);
   });
   const [err, setErr] = useState('');
-  const hasRoomFromUrl = code.length > 0;
+  const [hasRoomFromUrl] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('room') || '').length > 0;
+  });
 
   async function handleCreate() {
     if (!name.trim()) return;
