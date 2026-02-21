@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSocket } from '../useSocket';
 
-function PlayerCard({ player, isHost, canControl, myId, emit }) {
+function PlayerCard({ player, canControl, myId, emit }) {
   const isSelf = player.id === myId;
   const avSrc = player.avatarId
     ? `/assets/ui/avatar_${String(player.avatarId).padStart(2, '0')}.png`
@@ -116,7 +116,7 @@ export default function Lobby() {
             <h3>Red Team</h3>
             <div className="player-list">
               {reds.map((p) => (
-                <PlayerCard key={p.id} player={p} isHost={isHost} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
               ))}
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function Lobby() {
             <h3>Unassigned</h3>
             <div className="player-list">
               {unassigned.map((p) => (
-                <PlayerCard key={p.id} player={p} isHost={isHost} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
               ))}
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function Lobby() {
             <h3>Blue Team</h3>
             <div className="player-list">
               {blues.map((p) => (
-                <PlayerCard key={p.id} player={p} isHost={isHost} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
               ))}
             </div>
           </div>

@@ -105,18 +105,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }, []);
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const s = stateRef.current;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < s.cards.length; i++) {
-      drawCard(ctx, i);
-    }
-  }, []);
-
-  function drawCardFront(ctx, x, y, w, h, card, isHover) {
+  const drawCardFront = useCallback((ctx, x, y, w, h, card, isHover) => {
     const s = stateRef.current;
     ctx.fillStyle = isHover ? '#2a3a5a' : '#1e2d4d';
     roundRect(ctx, x, y, w, h, 6);
@@ -163,9 +152,9 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
       ctx.textBaseline = 'middle';
       ctx.fillText(card.content, x + w / 2, y + h / 2);
     }
-  }
+  }, []);
 
-  function drawCardBack(ctx, x, y, w, h, card) {
+  const drawCardBack = useCallback((ctx, x, y, w, h, card) => {
     const s = stateRef.current;
     const colors = COLORS[card.type] || COLORS.bystander;
     const typeMap = { red: 'red_agent', blue: 'blue_agent', bystander: 'bystander', assassin: 'assassin' };
@@ -205,9 +194,9 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
     ctx.lineWidth = 3;
     roundRect(ctx, x, y, w, h, 6);
     ctx.stroke();
-  }
+  }, []);
 
-  function drawCard(ctx, index) {
+  const drawCard = useCallback((ctx, index) => {
     const s = stateRef.current;
     const card = s.cards[index];
     if (!card) return;
@@ -279,9 +268,20 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
     }
 
     ctx.restore();
-  }
+  }, [getCardRect, drawCardFront, drawCardBack]);
 
-  function animateReveal(index, callback) {
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const s = stateRef.current;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < s.cards.length; i++) {
+      drawCard(ctx, i);
+    }
+  }, [drawCard]);
+
+  const animateReveal = useCallback((index, callback) => {
     const s = stateRef.current;
     const duration = 600;
     const start = performance.now();
@@ -299,9 +299,9 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
       }
     }
     rafRef.current = requestAnimationFrame(tick);
-  }
+  }, [draw]);
 
-  function hitTest(px, py) {
+  const hitTest = useCallback((px, py) => {
     const canvas = canvasRef.current;
     if (!canvas) return -1;
     const s = stateRef.current;
@@ -315,7 +315,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return i;
     }
     return -1;
-  }
+  }, [getCardRect]);
 
   useEffect(() => {
     if (!gameState) return;
@@ -349,7 +349,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
     } else {
       draw();
     }
-  }, [gameState, isSpymaster, voteInfo]);
+  }, [gameState, isSpymaster, voteInfo, resize, draw, animateReveal]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -398,7 +398,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
       observer.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [onCardClick]);
+  }, [onCardClick, draw, hitTest, resize]);
 
   return <canvas ref={canvasRef} className="game-board" />;
 }

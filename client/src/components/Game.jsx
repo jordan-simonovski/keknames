@@ -30,26 +30,20 @@ export default function Game() {
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
 
-  if (!gameState) return null;
+  const me = gameState?.you;
 
-  const me = gameState.you;
-  const isMyTurn = gameState.currentTeam === me.team && !gameState.winner;
-  const isSpymaster = me.role === 'spymaster';
-  const isSolo = me.isSolo;
-
-  const players = gameState.players || [];
-  const redPlayers = players.filter((p) => p.team === 'red');
-  const bluePlayers = players.filter((p) => p.team === 'blue');
-
-  const voteInfo = useMemo(() => ({
-    votes: gameState.votes || {},
-    majority: getMajority(gameState.votes),
-    myVote: getMyVote(gameState.votes, me.id),
-    myId: me.id,
-    isSolo: me.isSolo,
-    showVotes: gameState.phase === 'operative' && gameState.currentTeam === me.team && (me.role === 'operative' || me.isSolo),
-    playerAvatars: gameState.playerAvatars || {},
-  }), [gameState.votes, gameState.phase, gameState.currentTeam, me]);
+  const voteInfo = useMemo(() => {
+    if (!gameState || !me) return null;
+    return {
+      votes: gameState.votes || {},
+      majority: getMajority(gameState.votes),
+      myVote: getMyVote(gameState.votes, me.id),
+      myId: me.id,
+      isSolo: me.isSolo,
+      showVotes: gameState.phase === 'operative' && gameState.currentTeam === me.team && (me.role === 'operative' || me.isSolo),
+      playerAvatars: gameState.playerAvatars || {},
+    };
+  }, [gameState, me]);
 
   const handleCardClick = useCallback((idx) => {
     if (!gameState || !me) return;
@@ -73,6 +67,16 @@ export default function Game() {
       emit('cast-vote', { cardIndex: idx });
     }
   }, [gameState, me, emit]);
+
+  if (!gameState || !me) return null;
+
+  const isMyTurn = gameState.currentTeam === me.team && !gameState.winner;
+  const isSpymaster = me.role === 'spymaster';
+  const isSolo = me.isSolo;
+
+  const players = gameState.players || [];
+  const redPlayers = players.filter((p) => p.team === 'red');
+  const bluePlayers = players.filter((p) => p.team === 'blue');
 
   function handleGiveClue() {
     const word = clueWord.trim();
