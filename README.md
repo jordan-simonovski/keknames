@@ -1,21 +1,14 @@
 # KEKNAMES
 
-Online multiplayer Codenames clone with El Risitas-themed card art.
+Online multiplayer Codenames clone with kekw card art.
 
-## Game Modes
-
-- **Pictures**: 5x4 grid of El Risitas scene cards (Codenames Pictures rules)
-- **Words**: 5x5 grid of word cards with observability-themed defaults (classic Codenames rules). Hosts can paste a custom word list.
-
-## Running (production)
+## Running (locally)
 
 ```bash
 npm install
 cd client && npm install && npm run build && cd ..
 npm start
 ```
-
-Open `http://localhost:3000` in your browser. Share the room code with friends.
 
 ## Dev
 
