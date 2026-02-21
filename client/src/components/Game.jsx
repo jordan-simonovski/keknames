@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useSocket } from '../useSocket';
+import { useMuted, useSounds, useGameSounds, useTickSound, useTimeUpSound } from '../useSounds';
 import Board from './Board';
 import TeamPanel from './TeamPanel';
 import GameLog from './GameLog';
@@ -24,11 +25,179 @@ function getMyVote(votes, myId) {
   return null;
 }
 
+function DuetGame({ gameState, emit, muted, toggleMute }) {
+  const me = gameState.you;
+  const [clueWord, setClueWord] = useState('');
+  const [clueCount, setClueCount] = useState(1);
+  const [rightTab, setRightTab] = useState('chat');
+
+  const play = useSounds(muted);
+  const prevRef = useRef(null);
+  useGameSounds(gameState, prevRef, play);
+
+  const [timeLeft, setTimeLeft] = useState(null);
+  const deadlineRef = useRef(null);
+
+  useEffect(() => {
+    const deadline = gameState?.turnDeadline ?? null;
+    deadlineRef.current = deadline;
+    if (deadline === null) { setTimeLeft(null); return; }
+    function tick() {
+      const dl = deadlineRef.current;
+      if (dl === null) { setTimeLeft(null); return; }
+      setTimeLeft(Math.max(0, Math.ceil((dl - Date.now()) / 1000)));
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [gameState?.turnDeadline]);
+
+  useTickSound(timeLeft, muted);
+  useTimeUpSound(timeLeft, play);
+
+  const mySide = me.duetSide;
+  const isSpectator = !mySide;
+  const clueGiver = gameState.currentTurn;
+  const guesser = clueGiver === 'A' ? 'B' : 'A';
+  const amClueGiver = mySide === clueGiver;
+  const amGuesser = mySide === guesser;
+  const isOver = !!gameState.winner;
+
+  function handleGiveClue() {
+    const word = clueWord.trim();
+    if (!word) return;
+    emit('give-clue', { word, count: clueCount });
+    setClueWord('');
+  }
+
+  function handleCardClick(idx) {
+    if (isSpectator || !amGuesser || isOver) return;
+    if (gameState.phase !== 'operative') return;
+    const card = gameState.cards[idx];
+    if (card.revealed) return;
+    emit('make-guess', { cardIndex: idx });
+  }
+
+  const turnLabel = isOver
+    ? (gameState.winner === 'win' ? 'YOU WIN' : 'YOU LOSE')
+    : gameState.phase === 'spymaster'
+      ? `Player ${clueGiver} giving clue`
+      : `Player ${guesser} guessing`;
+
+  return (
+    <div className="screen game-screen duet-game">
+      <div className="game-top-bar">
+        <div className="top-bar-row">
+          <span className="room-code-badge">ROOM {gameState.roomCode}</span>
+          <div className="score-panel duet-score">
+            <span className="duet-tokens">Tokens: {gameState.turnsRemaining}</span>
+            <span className={`turn-indicator ${isOver ? (gameState.winner === 'win' ? 'duet-win' : 'duet-lose') : ''}`}>
+              {turnLabel}
+            </span>
+            <span className="duet-found">Found: {gameState.greenFound}/{gameState.greenTotal}</span>
+          </div>
+          {timeLeft !== null && !isOver && (
+            <span className={`turn-timer ${timeLeft <= 30 ? 'warning' : ''}`}>
+              {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+            </span>
+          )}
+          <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
+            {muted ? '\u{1F507}' : '\u{1F50A}'}
+          </button>
+          {isSpectator && <span className="spectator-badge">SPECTATING</span>}
+          {!isSpectator && <span className="duet-side-badge">You are Player {mySide}</span>}
+        </div>
+        {gameState.currentClue && (
+          <div className="clue-display">
+            Clue: <strong>{gameState.currentClue.word}</strong> {gameState.currentClue.count}
+            <span className="guesses-left">({gameState.guessesRemaining} guesses left)</span>
+          </div>
+        )}
+      </div>
+
+      <div className="game-body duet-body">
+        <div className="duet-board">
+          {gameState.cards.map((card, idx) => {
+            let colorClass = 'duet-neutral';
+            if (card.revealed) {
+              if (card.typeA === 'green' || card.typeB === 'green') colorClass = 'duet-green';
+              else if (card.revealedType === 'assassin') colorClass = 'duet-assassin';
+            } else if (!isSpectator && card.myType) {
+              if (card.myType === 'green') colorClass = 'duet-mygreen';
+              else if (card.myType === 'assassin') colorClass = 'duet-myassassin';
+            }
+            const clickable = !card.revealed && amGuesser && gameState.phase === 'operative' && !isOver;
+            return (
+              <div
+                key={card.id}
+                className={`duet-card ${colorClass} ${card.revealed ? 'revealed' : ''} ${clickable ? 'clickable' : ''}`}
+                onClick={clickable ? () => handleCardClick(idx) : undefined}
+              >
+                <span className="duet-card-word">{card.content}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="right-column">
+          <div className="right-tabs">
+            <div className="tab-bar">
+              <button className={`tab ${rightTab === 'chat' ? 'active' : ''}`} onClick={() => setRightTab('chat')}>Chat</button>
+              <button className={`tab ${rightTab === 'log' ? 'active' : ''}`} onClick={() => setRightTab('log')}>Log</button>
+            </div>
+            <div className="tab-content">
+              {rightTab === 'chat' ? <Chat /> : <GameLog log={gameState.log} cards={gameState.cards} />}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="game-controls">
+        {!isSpectator && amClueGiver && !isOver && gameState.phase === 'spymaster' && (
+          <div className="spymaster-controls">
+            <input
+              type="text" placeholder="One-word clue" maxLength={30}
+              value={clueWord} onChange={(e) => setClueWord(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleGiveClue()}
+              autoComplete="off"
+            />
+            <input
+              type="number" min={0} max={25}
+              value={clueCount} onChange={(e) => setClueCount(parseInt(e.target.value, 10) || 0)}
+            />
+            <button className="btn btn-primary" onClick={handleGiveClue}>Give Clue</button>
+          </div>
+        )}
+        {!isSpectator && amGuesser && !isOver && gameState.phase === 'operative' && (
+          <div className="operative-controls">
+            <button className="btn btn-secondary" onClick={() => emit('end-turn')}>End Turn</button>
+          </div>
+        )}
+      </div>
+
+      {isOver && (
+        <div className={`duet-game-over ${gameState.winner === 'win' ? 'duet-win-overlay' : 'duet-lose-overlay'}`}>
+          <h2>{gameState.winner === 'win' ? 'Victory' : 'Defeat'}</h2>
+          <p>{gameState.winner === 'win' ? 'All agents found.' : 'Mission failed.'}</p>
+          {me.isHost && (
+            <button className="btn btn-primary" onClick={() => emit('play-again')}>Play Again</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Game() {
   const { gameState, emit } = useSocket();
   const [clueWord, setClueWord] = useState('');
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
+
+  const [muted, toggleMute] = useMuted();
+  const play = useSounds(muted);
+  const prevGameRef = useRef(null);
+  useGameSounds(gameState, prevGameRef, play);
 
   const me = gameState?.you;
 
@@ -88,6 +257,13 @@ export default function Game() {
     return () => clearInterval(id);
   }, [gameState?.turnDeadline]);
 
+  useTickSound(timeLeft, muted);
+  useTimeUpSound(timeLeft, play);
+
+  if (gameState?.mode === 'duet') {
+    return <DuetGame gameState={gameState} emit={emit} muted={muted} toggleMute={toggleMute} />;
+  }
+
   if (!gameState || !me) return null;
 
   const isSpectator = me.team === null;
@@ -126,6 +302,9 @@ export default function Game() {
               {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
             </span>
           )}
+          <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
+            {muted ? '\u{1F507}' : '\u{1F50A}'}
+          </button>
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
         </div>
         {gameState.currentClue && (

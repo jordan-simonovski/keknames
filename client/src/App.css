@@ -136,6 +136,12 @@ input:focus, textarea:focus { border-color: var(--gold); }
   margin-left: 12px; vertical-align: middle;
   font-size: 0.75rem; padding: 4px 10px;
 }
+.btn-mute {
+  background: none; border: none; cursor: pointer;
+  font-size: 1.2rem; line-height: 1; padding: 4px 6px;
+  opacity: 0.7; transition: opacity 0.15s;
+}
+.btn-mute:hover { opacity: 1; }
 .join-invite {
   text-align: center; color: var(--gold); font-size: 1.1rem; padding: 4px 0;
 }
@@ -367,4 +373,63 @@ input:focus, textarea:focus { border-color: var(--gold); }
   .score-panel { gap: 12px; font-size: 1rem; }
   .spymaster-controls { flex-wrap: wrap; justify-content: center; }
   .spymaster-controls input[type="text"] { width: 140px; }
+  .duet-board { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .duet-card { font-size: 0.65rem; padding: 6px 2px; min-height: 40px; }
 }
+
+/* --- DUET MODE --- */
+
+.duet-board {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; flex: 1; padding: 8px;
+}
+
+.duet-card {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 2px solid transparent;
+  border-radius: var(--radius); padding: 10px 6px;
+  min-height: 56px; text-align: center;
+  font-size: 0.8rem; font-weight: 600; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--text);
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+  user-select: none;
+}
+
+.duet-card.clickable { cursor: pointer; }
+.duet-card.clickable:hover { border-color: var(--gold); }
+
+.duet-card.revealed { opacity: 0.6; }
+.duet-card.duet-green { background: rgba(46, 204, 113, 0.35); border-color: rgba(46, 204, 113, 0.7); }
+.duet-card.duet-assassin { background: rgba(44, 62, 80, 0.7); border-color: rgba(231, 76, 60, 0.8); color: var(--danger); }
+.duet-card.duet-neutral.revealed { background: var(--surface); border-color: var(--bystander); }
+
+.duet-card.duet-mygreen { border-color: rgba(46, 204, 113, 0.4); }
+.duet-card.duet-myassassin { border-color: rgba(231, 76, 60, 0.3); }
+
+.duet-body { display: flex; gap: 16px; flex: 1; overflow: hidden; }
+.duet-body .right-column { width: 260px; min-width: 200px; }
+
+.duet-score { gap: 20px; }
+.duet-tokens { color: var(--gold); font-weight: 700; }
+.duet-found { color: var(--green); font-weight: 700; }
+.duet-side-badge {
+  font-size: 0.8rem; padding: 3px 10px; border-radius: 4px;
+  background: var(--surface); color: var(--gold); font-weight: 600;
+}
+.duet-win { color: var(--green); }
+.duet-lose { color: var(--danger); }
+
+.duet-game-over {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; background: rgba(0, 0, 0, 0.85);
+}
+.duet-win-overlay h2 { color: var(--green); font-size: 3rem; }
+.duet-lose-overlay h2 { color: var(--danger); font-size: 3rem; }
+.duet-game-over p { color: var(--text-dim); font-size: 1.2rem; }
+
+.duet-empty-slot {
+  padding: 12px; text-align: center; color: var(--text-dim);
+  border: 2px dashed var(--surface-hover); border-radius: var(--radius);
+}
+.duet-slot-panel { border-color: var(--gold); }

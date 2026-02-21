@@ -51,6 +51,84 @@ function PlayerCard({ player, canControl, myId, emit }) {
   );
 }
 
+function DuetSlotCard({ player, avSrc }) {
+  return (
+    <div className="player-card">
+      {avSrc && <img className="player-avatar" src={avSrc} alt="" />}
+      <span className="player-name">
+        {player.name}
+        {player.isHost && <span className="host-badge">HOST</span>}
+      </span>
+    </div>
+  );
+}
+
+function DuetSlots({ lobbyState, myId, isHost, emit }) {
+  const playerA = lobbyState.players.find((p) => p.id === lobbyState.playerA);
+  const playerB = lobbyState.players.find((p) => p.id === lobbyState.playerB);
+  const spectators = lobbyState.players.filter(
+    (p) => p.id !== lobbyState.playerA && p.id !== lobbyState.playerB
+  );
+
+  function assignSlot(targetId, slot) {
+    emit('assign-duet-slot', { targetId, team: slot });
+  }
+
+  function avSrc(p) {
+    return p?.avatarId
+      ? `/assets/ui/avatar_${String(p.avatarId).padStart(2, '0')}.png`
+      : null;
+  }
+
+  return (
+    <div className="teams-container duet-slots">
+      <div className="team-panel duet-slot-panel">
+        <h3>Player A</h3>
+        <div className="player-list">
+          {playerA ? (
+            <DuetSlotCard player={playerA} avSrc={avSrc(playerA)} />
+          ) : (
+            <div className="duet-empty-slot">Empty</div>
+          )}
+        </div>
+      </div>
+      <div className="team-panel team-spectators">
+        <h3>Unassigned</h3>
+        <div className="player-list">
+          {spectators.map((p) => {
+            const canControl = isHost || p.id === myId;
+            return (
+              <div key={p.id} className={`player-card ${p.id === myId ? 'is-self' : ''}`}>
+                {avSrc(p) && <img className="player-avatar" src={avSrc(p)} alt="" />}
+                <span className="player-name">
+                  {p.name}
+                  {p.isHost && <span className="host-badge">HOST</span>}
+                </span>
+                {canControl && (
+                  <span className="team-btns">
+                    <button className="to-red" onClick={() => assignSlot(p.id, 'red')}>A</button>
+                    <button className="to-blue" onClick={() => assignSlot(p.id, 'blue')}>B</button>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="team-panel duet-slot-panel">
+        <h3>Player B</h3>
+        <div className="player-list">
+          {playerB ? (
+            <DuetSlotCard player={playerB} avSrc={avSrc(playerB)} />
+          ) : (
+            <div className="duet-empty-slot">Empty</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Lobby() {
   const { lobbyState, myId, emit, wordlistStatus } = useSocket();
   const [customWords, setCustomWords] = useState('');
@@ -101,18 +179,34 @@ export default function Lobby() {
             <div className="host-controls">
               <div className="mode-toggle">
                 <button
-                  className={`btn btn-mode ${lobbyState.mode === 'words' ? 'active' : ''}`}
-                  onClick={() => emit('set-mode', { mode: 'words' })}
+                  className={`btn btn-mode ${lobbyState.gameType === 'classic' ? 'active' : ''}`}
+                  onClick={() => emit('set-game-type', { gameType: 'classic' })}
                 >
-                  Words
+                  Classic
                 </button>
                 <button
-                  className={`btn btn-mode ${lobbyState.mode === 'pictures' ? 'active' : ''}`}
-                  onClick={() => emit('set-mode', { mode: 'pictures' })}
+                  className={`btn btn-mode ${lobbyState.gameType === 'duet' ? 'active' : ''}`}
+                  onClick={() => emit('set-game-type', { gameType: 'duet' })}
                 >
-                  Pictures
+                  Duet (2P Co-op)
                 </button>
               </div>
+              {lobbyState.gameType === 'classic' && (
+                <div className="mode-toggle">
+                  <button
+                    className={`btn btn-mode ${lobbyState.mode === 'words' ? 'active' : ''}`}
+                    onClick={() => emit('set-mode', { mode: 'words' })}
+                  >
+                    Words
+                  </button>
+                  <button
+                    className={`btn btn-mode ${lobbyState.mode === 'pictures' ? 'active' : ''}`}
+                    onClick={() => emit('set-mode', { mode: 'pictures' })}
+                  >
+                    Pictures
+                  </button>
+                </div>
+              )}
               <div className="timeout-toggle">
                 <span className="timeout-label">Turn Timer:</span>
                 {[0, 60, 120, 180, 300].map((s) => (
@@ -125,7 +219,7 @@ export default function Lobby() {
                   </button>
                 ))}
               </div>
-              {lobbyState.mode === 'words' && lobbyState.categories && (
+              {(lobbyState.mode === 'words' || lobbyState.gameType === 'duet') && lobbyState.categories && (
                 <div className="category-selector">
                   <label className="category-label">Category:</label>
                   <select
@@ -152,7 +246,7 @@ export default function Lobby() {
                   </span>
                 </div>
               )}
-              {lobbyState.mode === 'words' && (
+              {(lobbyState.mode === 'words' || lobbyState.gameType === 'duet') && (
                 <details className="wordlist-section">
                   <summary>Custom Word List</summary>
                   <textarea
@@ -177,8 +271,9 @@ export default function Lobby() {
 
         {!isHost && (
           <div className="lobby-settings-display">
+            {lobbyState.gameType === 'duet' && <span>Duet (2P Co-op)</span>}
             {lobbyState.turnTimeout > 0 && <span>Turn Timer: {lobbyState.turnTimeout / 60}m</span>}
-            {lobbyState.mode === 'words' && lobbyState.categories && (
+            {(lobbyState.mode === 'words' || lobbyState.gameType === 'duet') && lobbyState.categories && (
               <span>
                 Category: {lobbyState.categories.find((c) => c.id === lobbyState.categoryId)?.label ?? lobbyState.categoryId}
                 {' '}({lobbyState.difficulty})
@@ -187,32 +282,36 @@ export default function Lobby() {
           </div>
         )}
 
-        <div className="teams-container">
-          <div className="team-panel team-red">
-            <h3>Red Team</h3>
-            <div className="player-list">
-              {reds.map((p) => (
-                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
-              ))}
+        {lobbyState.gameType === 'duet' ? (
+          <DuetSlots lobbyState={lobbyState} myId={myId} isHost={isHost} emit={emit} />
+        ) : (
+          <div className="teams-container">
+            <div className="team-panel team-red">
+              <h3>Red Team</h3>
+              <div className="player-list">
+                {reds.map((p) => (
+                  <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                ))}
+              </div>
+            </div>
+            <div className="team-panel team-spectators">
+              <h3>Spectators</h3>
+              <div className="player-list">
+                {unassigned.map((p) => (
+                  <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                ))}
+              </div>
+            </div>
+            <div className="team-panel team-blue">
+              <h3>Blue Team</h3>
+              <div className="player-list">
+                {blues.map((p) => (
+                  <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
+                ))}
+              </div>
             </div>
           </div>
-          <div className="team-panel team-spectators">
-            <h3>Spectators</h3>
-            <div className="player-list">
-              {unassigned.map((p) => (
-                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
-              ))}
-            </div>
-          </div>
-          <div className="team-panel team-blue">
-            <h3>Blue Team</h3>
-            <div className="player-list">
-              {blues.map((p) => (
-                <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />
-              ))}
-            </div>
-          </div>
-        </div>
+        )}
 
         {isHost && (
           <div className="lobby-actions">

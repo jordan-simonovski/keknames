@@ -14,7 +14,10 @@ export type Team = 'red' | 'blue';
 export type Role = 'spymaster' | 'operative' | 'spectator';
 export type TurnTimeout = 0 | 60 | 120 | 180 | 300;
 export type Phase = 'spymaster' | 'operative' | 'gameover';
-export type GameMode = 'words' | 'pictures';
+export type GameMode = 'words' | 'pictures' | 'duet';
+export type GameType = 'classic' | 'duet';
+export type DuetCardType = 'green' | 'assassin' | 'neutral';
+export type DuetSide = 'A' | 'B';
 export type Difficulty = 'easy' | 'hard';
 export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'popculture' | 'music' | 'geography' | 'currentaffairs' | 'custom';
 
@@ -55,6 +58,20 @@ export interface ClueLogEntry {
 
 export type LogEntry = GuessLogEntry | ClueLogEntry;
 
+export interface DuetGuessLogEntry {
+  readonly side: DuetSide;
+  readonly cardIndex: number;
+  readonly cardType: DuetCardType;
+}
+
+export interface DuetClueLogEntry {
+  readonly side: DuetSide;
+  readonly clue: string;
+  readonly count: number;
+}
+
+export type DuetLogEntry = DuetGuessLogEntry | DuetClueLogEntry;
+
 export interface GameState {
   readonly mode: GameMode;
   readonly config: BoardConfig;
@@ -69,6 +86,39 @@ export interface GameState {
   winner: Team | null;
   log: LogEntry[];
   votes: Record<string, string[]>;
+  turnDeadline: number | null;
+}
+
+// --- Duet Mode ---
+
+export interface DuetKeyCard {
+  readonly sideA: DuetCardType[];
+  readonly sideB: DuetCardType[];
+}
+
+export interface DuetCard {
+  readonly id: number;
+  readonly content: string;
+  readonly typeA: DuetCardType;
+  readonly typeB: DuetCardType;
+  revealed: boolean;
+  revealedType: DuetCardType | null;
+}
+
+export interface DuetState {
+  readonly mode: 'duet';
+  readonly config: BoardConfig;
+  cards: DuetCard[];
+  duetKey: DuetKeyCard;
+  currentTurn: DuetSide;
+  phase: Phase;
+  currentClue: Clue | null;
+  guessesRemaining: number;
+  turnsRemaining: number;
+  greenFound: number;
+  greenTotal: number;
+  winner: 'win' | 'lose' | null;
+  log: DuetLogEntry[];
   turnDeadline: number | null;
 }
 
@@ -95,12 +145,15 @@ export interface Room {
   readonly code: string;
   host: string | null;
   players: Player[];
+  gameType: GameType;
   mode: GameMode;
   categoryId: CategoryId;
   difficulty: Difficulty;
   customWords: string[] | null;
   turnTimeout: TurnTimeout;
-  game: GameState | null;
+  game: GameState | DuetState | null;
+  playerA: string | null;
+  playerB: string | null;
   chatLog: ChatMessage[];
 }
 
@@ -116,6 +169,11 @@ export interface GuessResult {
   readonly switchedTo?: Team;
 }
 
+export interface DuetGuessResult {
+  readonly result: 'assassin' | 'win' | 'neutral' | 'correct' | 'tokens_exhausted';
+  readonly winner?: 'win' | 'lose';
+}
+
 export interface OkResult {
   readonly result: 'ok';
   readonly switchedTo?: Team;
@@ -125,8 +183,12 @@ export type GameResult = ErrorResult | GuessResult | OkResult;
 
 // --- Zod schemas for socket event payloads ---
 
+function stripHtml(s: string): string {
+  return s.replace(/[<>"'`]/g, '');
+}
+
 const sanitizedString = (maxLen: number) =>
-  z.string().trim().min(1).max(maxLen);
+  z.string().trim().transform(stripHtml).pipe(z.string().min(1).max(maxLen));
 
 export const CreateRoomSchema = z.object({
   name: sanitizedString(20),
@@ -153,7 +215,7 @@ export const SetCategorySchema = z.object({
 });
 
 export const SetWordlistSchema = z.object({
-  words: z.array(z.string().max(30)).max(500).nullable(),
+  words: z.array(z.string().transform(stripHtml).pipe(z.string().max(30))).max(500).nullable(),
 });
 
 export const GiveClueSchema = z.object({
@@ -163,6 +225,10 @@ export const GiveClueSchema = z.object({
 
 export const CardIndexSchema = z.object({
   cardIndex: z.number().int().min(0).max(24),
+});
+
+export const SetGameTypeSchema = z.object({
+  gameType: z.enum(['classic', 'duet']),
 });
 
 export const SetTimeoutSchema = z.object({
