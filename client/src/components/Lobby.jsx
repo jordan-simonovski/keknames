@@ -105,6 +105,33 @@ export default function Lobby() {
                   </button>
                 ))}
               </div>
+              {lobbyState.mode === 'words' && lobbyState.categories && (
+                <div className="category-selector">
+                  <label className="category-label">Category:</label>
+                  <select
+                    className="category-dropdown"
+                    value={lobbyState.categoryId}
+                    onChange={(e) => emit('set-category', { categoryId: e.target.value, difficulty: lobbyState.difficulty })}
+                  >
+                    {lobbyState.categories
+                      .filter((c) => c.id !== 'custom')
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                  </select>
+                  <span className="difficulty-toggle">
+                    {['easy', 'hard'].map((d) => (
+                      <button
+                        key={d}
+                        className={`btn btn-mode ${lobbyState.difficulty === d ? 'active' : ''}`}
+                        onClick={() => emit('set-category', { categoryId: lobbyState.categoryId, difficulty: d })}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+              )}
               {lobbyState.mode === 'words' && (
                 <details className="wordlist-section">
                   <summary>Custom Word List</summary>
@@ -128,9 +155,15 @@ export default function Lobby() {
           )}
         </div>
 
-        {!isHost && lobbyState.turnTimeout > 0 && (
-          <div className="timeout-display">
-            Turn Timer: {lobbyState.turnTimeout / 60}m
+        {!isHost && (
+          <div className="lobby-settings-display">
+            {lobbyState.turnTimeout > 0 && <span>Turn Timer: {lobbyState.turnTimeout / 60}m</span>}
+            {lobbyState.mode === 'words' && lobbyState.categories && (
+              <span>
+                Category: {lobbyState.categories.find((c) => c.id === lobbyState.categoryId)?.name ?? lobbyState.categoryId}
+                {' '}({lobbyState.difficulty})
+              </span>
+            )}
           </div>
         )}
 

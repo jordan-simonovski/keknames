@@ -16,7 +16,7 @@ export type TurnTimeout = 0 | 60 | 120 | 180 | 300;
 export type Phase = 'spymaster' | 'operative' | 'gameover';
 export type GameMode = 'words' | 'pictures';
 export type Difficulty = 'easy' | 'hard';
-export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'custom';
+export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'popculture' | 'music' | 'geography' | 'currentaffairs' | 'custom';
 
 export interface BoardConfig {
   readonly rows: number;
@@ -148,7 +148,7 @@ export const SetModeSchema = z.object({
 });
 
 export const SetCategorySchema = z.object({
-  categoryId: z.enum(['observability', 'buzzwords', 'influencers', 'programming', 'startups', 'custom']),
+  categoryId: z.enum(['observability', 'buzzwords', 'influencers', 'programming', 'startups', 'popculture', 'music', 'geography', 'currentaffairs', 'custom']),
   difficulty: z.enum(['easy', 'hard']),
 });
 

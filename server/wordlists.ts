@@ -123,6 +123,102 @@ const STARTUPS_HARD = dedupe([
   'TERMSHEET', 'DUEDILIGENCE', 'FIDUCIARY', 'SYNDICATE', 'SPV',
 ]);
 
+// ---------- Pop Culture ----------
+
+const POPCULTURE_EASY = dedupe([
+  'MARVEL', 'BATMAN', 'STARWARS', 'NETFLIX', 'TIKTOK',
+  'MEME', 'EMOJI', 'SELFIE', 'BINGE', 'SEQUEL',
+  'REBOOT', 'COSPLAY', 'FANDOM', 'ANIME', 'MANGA',
+  'PODCAST', 'STREAMER', 'CELEBRITY', 'PAPARAZZI', 'TABLOID',
+  'OSCAR', 'GRAMMY', 'EMMY', 'BLOCKBUSTER', 'FRANCHISE',
+  'SPINOFF', 'CAMEO', 'TRAILER', 'SPOILER', 'CLIFFHANGER',
+  'MINISERIES', 'REMAKE', 'TRENDING', 'CANCEL', 'STAN',
+  'FANGIRL', 'SHIP', 'CANON', 'RETCON', 'CROSSOVER',
+]);
+
+const POPCULTURE_HARD = dedupe([
+  'ZEITGEIST', 'ZEITGEBER', 'SIMULACRUM', 'PASTICHE', 'KITSCH',
+  'CAMP', 'IRONY', 'SATIRE', 'PARODY', 'TROPE',
+  'MACGUFFIN', 'KAIJU', 'ISEKAI', 'TOKUSATSU', 'WEBTOON',
+  'MANHWA', 'OTAKU', 'GACHA', 'PARASOCIAL', 'DEINFLUENCE',
+  'NEPO', 'COTTAGECORE', 'LIMINALSPACE', 'CREEPYPASTA', 'ARG',
+  'TULPA', 'RETROWAVE', 'VAPORWAVE', 'HYPERPOP', 'MUMBLECORE',
+  'BILDUNGSROMAN', 'AUTOFICTION', 'GONZO', 'BRICOLAGE', 'FLANEUR',
+  'SUBLIME', 'UNCANNY', 'GROTESQUE', 'ABSURDIST', 'SURREAL',
+]);
+
+// ---------- Music ----------
+
+const MUSIC_EASY = dedupe([
+  'GUITAR', 'PIANO', 'DRUMS', 'BASS', 'SINGER',
+  'CHORUS', 'LYRIC', 'ALBUM', 'SINGLE', 'CONCERT',
+  'FESTIVAL', 'ENCORE', 'REMIX', 'VINYL', 'PLAYLIST',
+  'SPOTIFY', 'RADIO', 'KARAOKE', 'DUET', 'SOLO',
+  'BAND', 'GENRE', 'HIPHOP', 'JAZZ', 'BLUES',
+  'ROCK', 'PUNK', 'POP', 'COUNTRY', 'REGGAE',
+  'MELODY', 'RHYTHM', 'TEMPO', 'BRIDGE', 'HOOK',
+  'BALLAD', 'ANTHEM', 'COVER', 'ACOUSTIC', 'ELECTRIC',
+]);
+
+const MUSIC_HARD = dedupe([
+  'SYNCOPATION', 'ARPEGGIO', 'CRESCENDO', 'STACCATO', 'LEGATO',
+  'FALSETTO', 'VIBRATO', 'TIMBRE', 'OSTINATO', 'POLYRHYTHM',
+  'BREAKBEAT', 'SHOEGAZE', 'GRINDCORE', 'DJENT', 'ZYDECO',
+  'GAMELAN', 'RAGA', 'AFROBEAT', 'BOSSA', 'KRAUTROCK',
+  'SAUDADE', 'LEITMOTIF', 'COUNTERPOINT', 'ATONALITY', 'DISSONANCE',
+  'HARMONICS', 'PENTATONIC', 'CHROMATIC', 'MODULATION', 'CADENCE',
+  'PORTAMENTO', 'GLISSANDO', 'RUBATO', 'FERMATA', 'SFORZANDO',
+  'TRITONE', 'DIMINISHED', 'AUGMENTED', 'MIXOLYDIAN', 'DORIAN',
+]);
+
+// ---------- Geography & Landmarks ----------
+
+const GEOGRAPHY_EASY = dedupe([
+  'EVEREST', 'AMAZON', 'SAHARA', 'PACIFIC', 'ARCTIC',
+  'VOLCANO', 'ISLAND', 'CANYON', 'GLACIER', 'DESERT',
+  'PYRAMID', 'COLOSSEUM', 'EIFFEL', 'LIBERTY', 'STONEHENGE',
+  'REEF', 'JUNGLE', 'TUNDRA', 'SAVANNA', 'DELTA',
+  'PENINSULA', 'CONTINENT', 'EQUATOR', 'TROPICS', 'COMPASS',
+  'ATLAS', 'BORDER', 'CAPITAL', 'HARBOR', 'LIGHTHOUSE',
+  'MOUNTAIN', 'VALLEY', 'PLATEAU', 'WATERFALL', 'LAGOON',
+  'FJORD', 'OASIS', 'STRAIT', 'ARCHIPELAGO', 'CRATER',
+]);
+
+const GEOGRAPHY_HARD = dedupe([
+  'PANGAEA', 'GONDWANA', 'LAURASIA', 'TECTONIC', 'SUBDUCTION',
+  'MORAINE', 'DRUMLIN', 'ESKER', 'KARST', 'STEPPE',
+  'TAIGA', 'CHAPARRAL', 'MESETA', 'ALTIPLANO', 'BATHYMETRY',
+  'ISTHMUS', 'ATOLL', 'CALDERA', 'FUMAROLE', 'GEYSER',
+  'PERMAFROST', 'LOESS', 'ALLUVIAL', 'SCREE', 'CIRQUE',
+  'BUTTE', 'MESA', 'ARROYO', 'WADI', 'CENOTE',
+  'DOLMEN', 'ZIGGURAT', 'CARAVANSERAI', 'MACHU', 'PETRA',
+  'ANGKOR', 'BAGAN', 'CAPPADOCIA', 'SANTORINI', 'PATAGONIA',
+]);
+
+// ---------- Current Affairs ----------
+
+const CURRENTAFFAIRS_EASY = dedupe([
+  'ELECTION', 'SUMMIT', 'TREATY', 'SANCTION', 'TARIFF',
+  'CLIMATE', 'PROTEST', 'REFUGEE', 'PANDEMIC', 'VACCINE',
+  'INFLATION', 'RECESSION', 'HOUSING', 'MINIMUM', 'CONGRESS',
+  'PARLIAMENT', 'DEBATE', 'POLL', 'BALLOT', 'CAMPAIGN',
+  'HEADLINE', 'BREAKING', 'OPINION', 'EDITORIAL', 'SOURCE',
+  'NUCLEAR', 'CEASEFIRE', 'EMBARGO', 'ALLIANCE', 'DIPLOMAT',
+  'SUBSIDY', 'DEFICIT', 'SURPLUS', 'EXPORT', 'IMPORT',
+  'REGULATION', 'PRIVACY', 'CENSORSHIP', 'MISINFORMATION', 'WHISTLEBLOWER',
+]);
+
+const CURRENTAFFAIRS_HARD = dedupe([
+  'GERRYMANDER', 'FILIBUSTER', 'OMNIBUS', 'QUORUM', 'SUPERMAJORITY',
+  'REALPOLITIK', 'DETENTE', 'HEGEMONY', 'MULTIPOLAR', 'AUTARKY',
+  'AUSTERITY', 'STAGFLATION', 'QUANTITATIVE', 'ARBITRAGE', 'DERIVATIVE',
+  'PETRODOLLAR', 'SOVEREIGNTY', 'BALKANIZE', 'ANNEXATION', 'IRREDENTISM',
+  'KLEPTOCRACY', 'OLIGARCH', 'TECHNOCRAT', 'POPULISM', 'NATIVISM',
+  'DIVESTITURE', 'EXTERNALITY', 'NEOLIBERAL', 'BRETTONWOODS', 'DAVOS',
+  'OPEC', 'BRICS', 'ASEAN', 'INTERPOL', 'HAGUE',
+  'RENDITION', 'EXTRADITION', 'JURISDICTION', 'PRECEDENT', 'JURISPRUDENCE',
+]);
+
 // ---------- Category registry ----------
 
 const CATEGORIES: Record<CategoryId, WordCategory> = {
@@ -130,8 +226,12 @@ const CATEGORIES: Record<CategoryId, WordCategory> = {
   buzzwords:     { id: 'buzzwords',     label: 'Tech Buzzwords 2026', easy: BUZZWORDS_EASY, hard: BUZZWORDS_HARD },
   influencers:   { id: 'influencers',   label: 'Tech Influencers', easy: INFLUENCERS_EASY, hard: INFLUENCERS_HARD },
   programming:   { id: 'programming',   label: 'Programming', easy: PROGRAMMING_EASY, hard: PROGRAMMING_HARD },
-  startups:      { id: 'startups',      label: 'Startup Lingo', easy: STARTUPS_EASY, hard: STARTUPS_HARD },
-  custom:        { id: 'custom',        label: 'Custom Words', easy: [], hard: [] },
+  startups:       { id: 'startups',       label: 'Startup Lingo',    easy: STARTUPS_EASY,       hard: STARTUPS_HARD },
+  popculture:     { id: 'popculture',     label: 'Pop Culture',      easy: POPCULTURE_EASY,     hard: POPCULTURE_HARD },
+  music:          { id: 'music',          label: 'Music',            easy: MUSIC_EASY,          hard: MUSIC_HARD },
+  geography:      { id: 'geography',      label: 'Geography',        easy: GEOGRAPHY_EASY,      hard: GEOGRAPHY_HARD },
+  currentaffairs: { id: 'currentaffairs', label: 'Current Affairs',  easy: CURRENTAFFAIRS_EASY, hard: CURRENTAFFAIRS_HARD },
+  custom:         { id: 'custom',         label: 'Custom Words',     easy: [],                  hard: [] },
 };
 
 export const CATEGORY_LIST: { id: CategoryId; label: string }[] =
