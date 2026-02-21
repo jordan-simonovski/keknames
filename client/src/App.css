@@ -119,6 +119,11 @@ input:focus, textarea:focus { border-color: var(--gold); }
   100% { opacity: 0; transform: translateY(0) translateX(0) scale(0.8) rotate(-5deg); }
 }
 
+.floating-card {
+  border-radius: 6px;
+  filter: blur(0.3px) saturate(0.8);
+}
+
 /* --- LOBBY --- */
 .lobby-screen { overflow-y: auto; }
 .lobby-container {

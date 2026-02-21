@@ -8,6 +8,7 @@ const FLOATING_IMAGES = [
   '/assets/ui/avatar_07.png', '/assets/ui/avatar_08.png',
   '/assets/ui/red_agent.png', '/assets/ui/blue_agent.png',
   '/assets/ui/bystander.png', '/assets/ui/assassin.png',
+  ...Array.from({ length: 24 }, (_, i) => `/assets/cards/card_${String(i + 1).padStart(2, '0')}.png`),
 ];
 
 function seededRandom(seed) {
@@ -21,16 +22,21 @@ function seededRandom(seed) {
 function FloatingBackdrop() {
   const items = useMemo(() => {
     const rng = seededRandom(42);
-    return Array.from({ length: 18 }, (_, i) => ({
-      key: i,
-      src: FLOATING_IMAGES[i % FLOATING_IMAGES.length],
-      size: 40 + rng() * 50,
-      left: rng() * 100,
-      top: rng() * 100,
-      delay: rng() * 12,
-      duration: 6 + rng() * 8,
-      drift: -30 + rng() * 60,
-    }));
+    return Array.from({ length: 28 }, (_, i) => {
+      const src = FLOATING_IMAGES[i % FLOATING_IMAGES.length];
+      const isCard = src.includes('/cards/');
+      return {
+        key: i,
+        src,
+        size: isCard ? 70 + rng() * 60 : 40 + rng() * 50,
+        left: rng() * 100,
+        top: rng() * 100,
+        delay: rng() * 14,
+        duration: 6 + rng() * 8,
+        drift: -30 + rng() * 60,
+        isCard,
+      };
+    });
   }, []);
 
   return (
@@ -38,7 +44,7 @@ function FloatingBackdrop() {
       {items.map((it) => (
         <img
           key={it.key}
-          className="floating-avatar"
+          className={`floating-avatar${it.isCard ? ' floating-card' : ''}`}
           src={it.src}
           alt=""
           style={{
