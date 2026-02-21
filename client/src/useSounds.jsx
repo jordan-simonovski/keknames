@@ -22,7 +22,7 @@ export function useMuted() {
   const toggle = useCallback(() => {
     setMuted((prev) => {
       const next = !prev;
-      try { localStorage.setItem(MUTE_KEY, next ? '1' : '0'); } catch {}
+      try { localStorage.setItem(MUTE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
       return next;
     });
   }, []);
