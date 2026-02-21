@@ -159,10 +159,16 @@ input:focus, textarea:focus { border-color: var(--gold); }
 .player-role { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1); }
 .player-role.spymaster { background: var(--gold); color: #1a1a2e; font-weight: 600; }
 .host-badge { font-size: 0.7rem; color: var(--gold); margin-left: 6px; }
-.team-btns { display: flex; gap: 4px; }
-.team-btns button { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; font-size: 0; }
+.team-btns { display: flex; gap: 6px; margin-left: auto; }
+.team-btns button {
+  padding: 3px 10px; border-radius: 4px; border: none; cursor: pointer;
+  font-size: 0.75rem; font-weight: 600; color: #fff; letter-spacing: 0.3px;
+  transition: opacity 0.15s;
+}
+.team-btns button:hover { opacity: 0.85; }
 .to-red { background: var(--red); }
 .to-blue { background: var(--blue); }
+.to-spectate { background: var(--surface-hover); color: var(--text-dim); }
 
 .lobby-actions { text-align: center; }
 .btn-start { font-size: 1.1rem; padding: 12px 40px; }

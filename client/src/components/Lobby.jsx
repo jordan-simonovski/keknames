@@ -37,13 +37,13 @@ function PlayerCard({ player, canControl, myId, emit }) {
       {canControl && (
         <span className="team-btns">
           {player.team !== 'red' && (
-            <button className="to-red" onClick={() => moveTo('red')} title="Red">R</button>
+            <button className="to-red" onClick={() => moveTo('red')}>Red</button>
           )}
           {player.team !== 'blue' && (
-            <button className="to-blue" onClick={() => moveTo('blue')} title="Blue">B</button>
+            <button className="to-blue" onClick={() => moveTo('blue')}>Blue</button>
           )}
           {player.team !== null && (
-            <button className="to-spectate" onClick={() => moveTo(null)} title="Spectate">S</button>
+            <button className="to-spectate" onClick={() => moveTo(null)}>Spectate</button>
           )}
         </span>
       )}
@@ -116,7 +116,7 @@ export default function Lobby() {
                     {lobbyState.categories
                       .filter((c) => c.id !== 'custom')
                       .map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                        <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                   </select>
                   <span className="difficulty-toggle">
@@ -160,7 +160,7 @@ export default function Lobby() {
             {lobbyState.turnTimeout > 0 && <span>Turn Timer: {lobbyState.turnTimeout / 60}m</span>}
             {lobbyState.mode === 'words' && lobbyState.categories && (
               <span>
-                Category: {lobbyState.categories.find((c) => c.id === lobbyState.categoryId)?.name ?? lobbyState.categoryId}
+                Category: {lobbyState.categories.find((c) => c.id === lobbyState.categoryId)?.label ?? lobbyState.categoryId}
                 {' '}({lobbyState.difficulty})
               </span>
             )}
