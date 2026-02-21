@@ -353,28 +353,149 @@ input:focus, textarea:focus { border-color: var(--gold); }
 .winner-text.team-blue { color: var(--blue); }
 .waiting-host { color: var(--text-dim); font-size: 0.9rem; }
 
+.lose-screen { overflow: hidden; max-width: 420px; padding: 0; gap: 0; }
+.lose-gif {
+  width: 100%; display: block; border-radius: 12px 12px 0 0;
+}
+.lose-screen .winner-text {
+  padding: 16px 24px 8px;
+}
+.lose-screen .btn,
+.lose-screen .waiting-host {
+  margin: 0 24px 16px;
+}
+.lose-text-wobble {
+  animation: loseWobble 0.6s ease-in-out infinite alternate;
+  font-size: 2.2rem; letter-spacing: 4px;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+}
+@keyframes loseWobble {
+  0%   { transform: rotate(-2deg) scale(1); }
+  50%  { transform: rotate(1.5deg) scale(1.06); }
+  100% { transform: rotate(-2deg) scale(1); }
+}
+
 /* --- Animations --- */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+/* --- Mobile chat/log overlay --- */
+.mobile-chat-toggle {
+  display: none;
+  position: fixed; bottom: 10px; right: 10px; z-index: 90;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--gold); color: #1a1a2e;
+  border: none; font-size: 1.3rem; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  transition: transform 0.15s;
+}
+.mobile-chat-toggle:active { transform: scale(0.92); }
+.mobile-chat-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--danger); color: #fff;
+  font-size: 0.65rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(0,0,0,0.6);
+}
+.mobile-overlay.open { display: flex; flex-direction: column; justify-content: flex-end; }
+.mobile-overlay-panel {
+  background: var(--bg-light); border-radius: 12px 12px 0 0;
+  max-height: 55vh; display: flex; flex-direction: column;
+  overflow: hidden; animation: slideUp 0.2s ease-out;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.mobile-overlay-header {
+  display: flex; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid #333; flex-shrink: 0;
+}
+.mobile-overlay-header .tab-bar { flex: 1; display: flex; border-bottom: none; }
+.mobile-overlay-close {
+  background: none; border: none; color: var(--text-dim);
+  font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+.mobile-overlay-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
 /* --- Responsive --- */
 @media (max-width: 900px) {
-  .game-body { flex-direction: column; align-items: center; }
-  .game-team-panel { width: 100%; flex-direction: row; gap: 16px; padding: 8px 12px; }
-  .right-column { width: 100%; flex-direction: column; }
-  .panel-remaining { border-bottom: none; padding: 0 12px 0 0; border-right: 1px solid rgba(255,255,255,0.1); }
-  .remaining-count { font-size: 1.5rem; }
-  .game-log { max-height: 100px; }
   .logo { font-size: 2.5rem; letter-spacing: 4px; }
   .landing-form { width: 90%; }
-  .teams-container { grid-template-columns: 1fr; }
-  .score-panel { gap: 12px; font-size: 1rem; }
-  .spymaster-controls { flex-wrap: wrap; justify-content: center; }
-  .spymaster-controls input[type="text"] { width: 140px; }
-  .duet-board { grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  .duet-card { font-size: 0.65rem; padding: 6px 2px; min-height: 40px; }
+
+  /* Lobby */
+  .lobby-container { padding: 12px; gap: 12px; }
+  .teams-container { grid-template-columns: 1fr; gap: 10px; }
+  .team-panel { padding: 10px; }
+  .player-card { font-size: 0.82rem; padding: 6px 8px; flex-wrap: wrap; gap: 4px; }
+  .team-btns { margin-left: 0; }
+  .team-btns button { padding: 3px 8px; font-size: 0.7rem; }
+  .host-controls { gap: 8px; }
+  .mode-toggle { flex-wrap: wrap; gap: 6px; }
+  .timeout-toggle { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .btn-mode { padding: 5px 12px; font-size: 0.8rem; }
+  .category-selector { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .category-dropdown { max-width: 160px; font-size: 0.85rem; }
+  .btn-start { font-size: 1rem; padding: 10px 30px; }
+
+  /* Game top bar */
+  .game-top-bar { padding: 6px 10px; gap: 2px; }
+  .top-bar-row { flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .room-code-badge { min-width: auto; font-size: 0.65rem; letter-spacing: 2px; }
+  .score-panel { gap: 8px; font-size: 0.9rem; }
+  .turn-indicator { padding: 2px 10px; font-size: 0.78rem; }
+  .turn-timer { font-size: 0.85rem; }
+  .clue-display { font-size: 0.85rem; text-align: center; }
+  .clue-display strong { font-size: 0.95rem; }
+
+  /* Game body: board fills the screen, side panels hidden */
+  .game-body { padding: 4px; }
+  .game-team-panel { display: none; }
+  .right-column { display: none; }
+  .board-wrapper { padding: 0; }
+
+  /* Show the mobile chat FAB */
+  .mobile-chat-toggle { display: flex; align-items: center; justify-content: center; }
+
+  /* Controls */
+  .game-controls { padding: 6px 10px; min-height: 44px; }
+  .spymaster-controls { flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .spymaster-controls input[type="text"] { width: 120px; font-size: 0.85rem; padding: 6px 8px; }
+  .spymaster-controls input[type="number"] { width: 50px; font-size: 0.85rem; padding: 6px; }
+  .spymaster-controls .btn { padding: 6px 14px; font-size: 0.85rem; }
+  .operative-controls .btn { padding: 8px 20px; font-size: 0.9rem; }
+
+  /* Duet */
+  .duet-body { gap: 4px; }
+  .duet-body .right-column { display: none; }
+  .duet-board { gap: 4px; padding: 4px; }
+  .duet-card { font-size: 0.6rem; padding: 4px 2px; min-height: 36px; }
+  .duet-score { gap: 10px; font-size: 0.85rem; }
+  .duet-side-badge { font-size: 0.7rem; padding: 2px 6px; }
+
+  /* Overlay visible */
+  .overlay-content { padding: 24px; }
+  .winner-text { font-size: 1.5rem; }
+  .duet-game-over h2 { font-size: 2rem; }
+}
+
+@media (max-width: 420px) {
+  .logo { font-size: 2rem; letter-spacing: 2px; }
+  .tagline { font-size: 0.9rem; margin-bottom: 16px; }
+  .room-code { font-size: 1.3rem; letter-spacing: 2px; }
+  .lobby-header h2 { font-size: 1.2rem; }
+  .score-panel { gap: 4px; font-size: 0.8rem; }
+  .turn-indicator { font-size: 0.7rem; padding: 2px 6px; }
+  .duet-card { font-size: 0.55rem; min-height: 30px; }
 }
 
 /* --- DUET MODE --- */

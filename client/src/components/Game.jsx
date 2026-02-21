@@ -7,6 +7,26 @@ import GameLog from './GameLog';
 import GameOver from './GameOver';
 import Chat from './Chat';
 
+function MobileChatOverlay({ isOpen, onClose, activeTab, setActiveTab, children }) {
+  if (!isOpen) return null;
+  return (
+    <div className="mobile-overlay open" onClick={onClose}>
+      <div className="mobile-overlay-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-overlay-header">
+          <div className="tab-bar">
+            <button className={`tab ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>Chat</button>
+            <button className={`tab ${activeTab === 'log' ? 'active' : ''}`} onClick={() => setActiveTab('log')}>Log</button>
+          </div>
+          <button className="mobile-overlay-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="mobile-overlay-body">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getMajority(votes) {
   if (!votes) return null;
   let best = null, bestCount = 0, tied = false;
@@ -26,10 +46,14 @@ function getMyVote(votes, myId) {
 }
 
 function DuetGame({ gameState, emit, muted, toggleMute }) {
+  const { chatMessages } = useSocket();
   const me = gameState.you;
   const [clueWord, setClueWord] = useState('');
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [seenChat, setSeenChat] = useState(0);
+  const unreadChat = chatMessages ? chatMessages.length - seenChat : 0;
 
   const play = useSounds(muted);
   const prevRef = useRef(null);
@@ -175,6 +199,22 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
         )}
       </div>
 
+      <button
+        className="mobile-chat-toggle"
+        onClick={() => { setMobileOpen(true); setSeenChat(chatMessages?.length ?? 0); }}
+      >
+        {'\u{1F4AC}'}
+        {unreadChat > 0 && <span className="mobile-chat-badge">{unreadChat}</span>}
+      </button>
+      <MobileChatOverlay
+        isOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        activeTab={rightTab}
+        setActiveTab={setRightTab}
+      >
+        {rightTab === 'chat' ? <Chat /> : <GameLog log={gameState.log} cards={gameState.cards} />}
+      </MobileChatOverlay>
+
       {isOver && (
         <div className={`duet-game-over ${gameState.winner === 'win' ? 'duet-win-overlay' : 'duet-lose-overlay'}`}>
           <h2>{gameState.winner === 'win' ? 'Victory' : 'Defeat'}</h2>
@@ -189,10 +229,13 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
 }
 
 export default function Game() {
-  const { gameState, emit } = useSocket();
+  const { gameState, emit, chatMessages } = useSocket();
   const [clueWord, setClueWord] = useState('');
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [seenChat, setSeenChat] = useState(0);
+  const unreadChat = chatMessages ? chatMessages.length - seenChat : 0;
 
   const [muted, toggleMute] = useMuted();
   const play = useSounds(muted);
@@ -390,6 +433,22 @@ export default function Game() {
       </div>
 
       <GameOver state={gameState} />
+
+      <button
+        className="mobile-chat-toggle"
+        onClick={() => { setMobileOpen(true); setSeenChat(chatMessages?.length ?? 0); }}
+      >
+        {'\u{1F4AC}'}
+        {unreadChat > 0 && <span className="mobile-chat-badge">{unreadChat}</span>}
+      </button>
+      <MobileChatOverlay
+        isOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        activeTab={rightTab}
+        setActiveTab={setRightTab}
+      >
+        {rightTab === 'chat' ? <Chat /> : <GameLog log={gameState.log} cards={gameState.cards} />}
+      </MobileChatOverlay>
     </div>
   );
 }

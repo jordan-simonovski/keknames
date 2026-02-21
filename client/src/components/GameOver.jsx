@@ -7,12 +7,16 @@ export default function GameOver({ state }) {
 
   const lastLog = state.log[state.log.length - 1];
   const reason = lastLog?.cardType === 'assassin' ? ' (Assassin)' : '';
+  const iLost = me.team && me.team !== state.winner;
 
   return (
     <div className="overlay">
-      <div className="overlay-content">
-        <h2 className={`winner-text team-${state.winner}`}>
-          {state.winner.toUpperCase()} TEAM WINS{reason}
+      <div className={`overlay-content ${iLost ? 'lose-screen' : ''}`}>
+        {iLost && (
+          <img className="lose-gif" src="/assets/ui/el-risitas-lose.gif" alt="" />
+        )}
+        <h2 className={`winner-text team-${state.winner} ${iLost ? 'lose-text-wobble' : ''}`}>
+          {iLost ? 'YOU LOSE' : `${state.winner.toUpperCase()} TEAM WINS`}{reason}
         </h2>
         {me.isHost && (
           <>
