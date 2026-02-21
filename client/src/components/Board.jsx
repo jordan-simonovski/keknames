@@ -4,7 +4,7 @@ const COLORS = {
   red: { bg: '#c0392b', border: '#e74c3c', text: '#fff' },
   blue: { bg: '#2471a3', border: '#3498db', text: '#fff' },
   bystander: { bg: '#5d6d7e', border: '#7f8c8d', text: '#ddd' },
-  assassin: { bg: '#1a1a1a', border: '#e74c3c', text: '#e74c3c' },
+  assassin: { bg: '#1a1a1a', border: '#ffffff', text: '#ff4444' },
 };
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -113,15 +113,25 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick })
 
     if (s.isSpymaster && card.type) {
       const colors = COLORS[card.type] || COLORS.bystander;
-      ctx.strokeStyle = colors.border;
-      ctx.lineWidth = 3;
-      roundRect(ctx, x, y, w, h, 6);
-      ctx.stroke();
+      const isAssassin = card.type === 'assassin';
       ctx.fillStyle = colors.bg;
-      ctx.globalAlpha = 0.15;
+      ctx.globalAlpha = isAssassin ? 0.45 : 0.15;
       roundRect(ctx, x, y, w, h, 6);
       ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.strokeStyle = colors.border;
+      ctx.lineWidth = isAssassin ? 4 : 3;
+      roundRect(ctx, x, y, w, h, 6);
+      ctx.stroke();
+      if (isAssassin) {
+        const skull = '\u2620';
+        const iconSize = Math.floor(Math.min(w, h) * 0.22);
+        ctx.font = `${iconSize}px sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#ff4444';
+        ctx.fillText(skull, x + w - 6, y + 4);
+      }
     } else {
       ctx.strokeStyle = '#334';
       ctx.lineWidth = 1;
