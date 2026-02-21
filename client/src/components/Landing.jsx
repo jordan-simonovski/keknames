@@ -69,7 +69,7 @@ export default function Landing() {
     return (params.get('room') || '').toUpperCase().slice(0, 4);
   });
   const [err, setErr] = useState('');
-  const [hasRoomFromUrl] = useState(() => {
+  const [hasRoomFromUrl, setHasRoomFromUrl] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return (params.get('room') || '').length > 0;
   });
@@ -91,7 +91,7 @@ export default function Landing() {
       <FloatingBackdrop />
       <div className="landing-container">
         <h1 className="logo">KEKNAMES</h1>
-        <p className="tagline">codenames but unhinged</p>
+        <p className="tagline">codenames but kekw</p>
         <div className="landing-form">
           <input
             type="text"
@@ -110,6 +110,17 @@ export default function Landing() {
               </div>
               <button className="btn btn-primary" onClick={handleJoin}>
                 Join Room
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setHasRoomFromUrl(false);
+                  setCode('');
+                  setErr('');
+                  window.history.replaceState(null, '', window.location.pathname);
+                }}
+              >
+                Back to Menu
               </button>
             </>
           ) : (

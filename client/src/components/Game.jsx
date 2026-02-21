@@ -7,6 +7,17 @@ import GameLog from './GameLog';
 import GameOver from './GameOver';
 import Chat from './Chat';
 import RoundSplash from './RoundSplash';
+import RulesModal from './RulesModal';
+
+function InfoButton({ onClick }) {
+  return (
+    <button className="info-btn" onClick={onClick} title="Spymaster rules" type="button">
+      <svg viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm-1.5 3a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5z" clipRule="evenodd" />
+      </svg>
+    </button>
+  );
+}
 
 function MobileChatOverlay({ isOpen, onClose, activeTab, setActiveTab, children }) {
   if (!isOpen) return null;
@@ -47,13 +58,15 @@ function getMyVote(votes, myId) {
 }
 
 function DuetGame({ gameState, emit, muted, toggleMute }) {
-  const { chatMessages } = useSocket();
+  const { chatMessages, leaveRoom } = useSocket();
   const me = gameState.you;
   const [clueWord, setClueWord] = useState('');
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [seenChat, setSeenChat] = useState(0);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesSpymaster, setRulesSpymaster] = useState(false);
   const unreadChat = chatMessages ? chatMessages.length - seenChat : 0;
 
   const play = useSounds(muted);
@@ -130,6 +143,8 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
             {muted ? '\u{1F507}' : '\u{1F50A}'}
           </button>
+          <button className="rules-btn" onClick={() => { setRulesOpen(true); setRulesSpymaster(false); }}>RULES</button>
+          <button className="rules-btn btn-leave-game" onClick={leaveRoom}>LEAVE</button>
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
           {!isSpectator && <span className="duet-side-badge">You are Player {mySide}</span>}
         </div>
@@ -140,6 +155,8 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
           </div>
         )}
       </div>
+
+      {rulesOpen && <RulesModal mode="duet" spymasterTip={rulesSpymaster} onClose={() => setRulesOpen(false)} />}
 
       <div className="game-body duet-body">
         <div className="duet-board">
@@ -181,6 +198,7 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
       <div className="game-controls">
         {!isSpectator && amClueGiver && !isOver && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
+            <InfoButton onClick={() => { setRulesSpymaster(true); setRulesOpen(true); }} />
             <input
               type="text" placeholder="One-word clue" maxLength={30}
               value={clueWord} onChange={(e) => setClueWord(e.target.value)}
@@ -231,12 +249,14 @@ function DuetGame({ gameState, emit, muted, toggleMute }) {
 }
 
 export default function Game() {
-  const { gameState, emit, chatMessages } = useSocket();
+  const { gameState, emit, chatMessages, leaveRoom } = useSocket();
   const [clueWord, setClueWord] = useState('');
   const [clueCount, setClueCount] = useState(1);
   const [rightTab, setRightTab] = useState('chat');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [seenChat, setSeenChat] = useState(0);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesSpymaster, setRulesSpymaster] = useState(false);
   const unreadChat = chatMessages ? chatMessages.length - seenChat : 0;
 
   const [muted, toggleMute] = useMuted();
@@ -351,6 +371,8 @@ export default function Game() {
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
             {muted ? '\u{1F507}' : '\u{1F50A}'}
           </button>
+          <button className="rules-btn" onClick={() => { setRulesOpen(true); setRulesSpymaster(false); }}>RULES</button>
+          <button className="rules-btn btn-leave-game" onClick={leaveRoom}>LEAVE</button>
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
         </div>
         {gameState.currentClue && (
@@ -360,6 +382,8 @@ export default function Game() {
           </div>
         )}
       </div>
+
+      {rulesOpen && <RulesModal mode="classic" spymasterTip={rulesSpymaster} onClose={() => setRulesOpen(false)} />}
 
       <div className="game-body">
         <TeamPanel team="red" players={redPlayers} remaining={gameState.redRemaining} label="remaining" />
@@ -409,6 +433,7 @@ export default function Game() {
       <div className="game-controls">
         {!isSpectator && isSpymaster && isMyTurn && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
+            <InfoButton onClick={() => { setRulesSpymaster(true); setRulesOpen(true); }} />
             <input
               type="text"
               placeholder="One-word clue"

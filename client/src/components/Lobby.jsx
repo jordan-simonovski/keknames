@@ -130,7 +130,7 @@ function DuetSlots({ lobbyState, myId, isHost, emit }) {
 }
 
 export default function Lobby() {
-  const { lobbyState, myId, emit, wordlistStatus } = useSocket();
+  const { lobbyState, myId, emit, wordlistStatus, leaveRoom } = useSocket();
   const [customWords, setCustomWords] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -174,6 +174,7 @@ export default function Lobby() {
             <button className="btn btn-small btn-copy-link" onClick={copyLink}>
               {copied ? 'Copied' : 'Copy Link'}
             </button>
+            <button className="btn btn-small btn-leave" onClick={leaveRoom}>Leave</button>
           </h2>
           {isHost && (
             <div className="host-controls">

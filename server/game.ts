@@ -196,6 +196,15 @@ export function submitClue(
   const clueWord = word.trim().toUpperCase();
   if (clueWord.length === 0) return { error: 'Empty clue' };
 
+  if (game.mode !== 'pictures') {
+    for (const card of game.cards) {
+      const cw = card.content.toUpperCase();
+      if (clueWord.includes(cw) || cw.includes(clueWord)) {
+        return { error: `Clue must not contain or match board word "${cw}"` };
+      }
+    }
+  }
+
   game.currentClue = { word: clueWord, count };
   game.guessesRemaining = count + 1;
   game.phase = 'operative';

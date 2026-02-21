@@ -3,6 +3,14 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
+function setSessionCookie(token) {
+  document.cookie = `keknames_session=${token}; path=/; max-age=86400; SameSite=Lax`;
+}
+
+function clearSessionCookie() {
+  document.cookie = 'keknames_session=; path=/; max-age=0; SameSite=Lax';
+}
+
 export function SocketProvider({ children }) {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -20,10 +28,20 @@ export function SocketProvider({ children }) {
 
     socket.on('connect', () => {
       setConnected(true);
-      setMyId(socket.id);
     });
 
     socket.on('disconnect', () => setConnected(false));
+
+    socket.on('rejoined', (data) => {
+      setMyId(data.playerId);
+      setScreen(data.inGame ? 'game' : 'lobby');
+    });
+
+    socket.on('session-expired', () => {
+      clearSessionCookie();
+      setMyId(null);
+      setScreen('landing');
+    });
 
     socket.on('lobby-state', (state) => {
       setLobbyState(state);
@@ -63,7 +81,8 @@ export function SocketProvider({ children }) {
     return new Promise((resolve, reject) => {
       socketRef.current.emit('create-room', { name }, (res) => {
         if (res.error) { reject(res.error); return; }
-        setMyId(socketRef.current.id);
+        setMyId(res.playerId);
+        if (res.sessionToken) setSessionCookie(res.sessionToken);
         setScreen('lobby');
         resolve(res);
       });
@@ -74,7 +93,8 @@ export function SocketProvider({ children }) {
     return new Promise((resolve, reject) => {
       socketRef.current.emit('join-room', { code, name }, (res) => {
         if (res.error) { reject(res.error); return; }
-        setMyId(socketRef.current.id);
+        setMyId(res.playerId);
+        if (res.sessionToken) setSessionCookie(res.sessionToken);
         setScreen(res.inGame ? 'game' : 'lobby');
         resolve(res);
       });
@@ -83,6 +103,18 @@ export function SocketProvider({ children }) {
 
   const emit = useCallback((event, data) => {
     socketRef.current?.emit(event, data);
+  }, []);
+
+  const leaveRoom = useCallback(() => {
+    if (!window.confirm('Leave room? Your session will be ended.')) return;
+    socketRef.current?.emit('leave-room');
+    clearSessionCookie();
+    setMyId(null);
+    setLobbyState(null);
+    setGameState(null);
+    setChatMessages([]);
+    setScreen('landing');
+    window.history.replaceState(null, '', window.location.pathname);
   }, []);
 
   const value = {
@@ -97,6 +129,7 @@ export function SocketProvider({ children }) {
     chatMessages,
     createRoom,
     joinRoom,
+    leaveRoom,
     emit,
   };
 

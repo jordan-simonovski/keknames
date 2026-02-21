@@ -125,6 +125,13 @@ export function submitDuetClue(
   const clueWord = word.trim().toUpperCase();
   if (clueWord.length === 0) return { error: 'Empty clue' };
 
+  for (const card of state.cards) {
+    const cw = card.content.toUpperCase();
+    if (clueWord.includes(cw) || cw.includes(clueWord)) {
+      return { error: `Clue must not contain or match board word "${cw}"` };
+    }
+  }
+
   state.currentClue = { word: clueWord, count };
   state.guessesRemaining = count === 0 ? 99 : count + 1;
   state.phase = 'operative';

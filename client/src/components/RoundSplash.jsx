@@ -9,29 +9,22 @@ const SPLASH_IMAGES = [
 export default function RoundSplash({ gameState }) {
   const [visible, setVisible] = useState(false);
   const [src, setSrc] = useState(null);
-  const turnRef = useRef(null);
+  const prevEmpty = useRef(null);
 
-  const turnKey = gameState
-    ? `${gameState.currentTeam ?? ''}-${gameState.currentTurn ?? ''}`
-    : null;
+  const isNewGame = gameState ? gameState.log.length === 0 : false;
 
   useEffect(() => {
-    if (!turnKey) return;
-    if (turnRef.current === null) {
-      turnRef.current = turnKey;
-      setSrc(SPLASH_IMAGES[Math.floor(Math.random() * SPLASH_IMAGES.length)]);
-      setVisible(true);
-      const t = setTimeout(() => setVisible(false), 2400);
-      return () => clearTimeout(t);
+    if (!isNewGame) {
+      prevEmpty.current = false;
+      return;
     }
-    if (turnRef.current !== turnKey) {
-      turnRef.current = turnKey;
-      setSrc(SPLASH_IMAGES[Math.floor(Math.random() * SPLASH_IMAGES.length)]);
-      setVisible(true);
-      const t = setTimeout(() => setVisible(false), 2400);
-      return () => clearTimeout(t);
-    }
-  }, [turnKey]);
+    if (prevEmpty.current) return;
+    prevEmpty.current = true;
+    setSrc(SPLASH_IMAGES[Math.floor(Math.random() * SPLASH_IMAGES.length)]);
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), 2400);
+    return () => clearTimeout(t);
+  }, [isNewGame]);
 
   if (!visible || !src) return null;
 

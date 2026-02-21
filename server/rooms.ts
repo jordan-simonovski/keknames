@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import type { z } from 'zod';
 import {
@@ -22,6 +22,11 @@ const rooms = new Map<string, Room>();
 
 const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
 const roomLastActivity = new Map<string, number>();
+
+interface Session { playerId: string; roomCode: string }
+const sessions = new Map<string, Session>();
+const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const DISCONNECT_GRACE_MS = 60_000;
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const ROOM_CODE_LEN = 4;
@@ -60,9 +65,11 @@ function destroyRoom(room: Room, io: Server): void {
   clearRoomTimer(room);
   roomLastActivity.delete(room.code);
   for (const p of room.players) {
+    cancelDisconnectTimer(p.id);
+    deleteSessionsForPlayer(p.id);
     const s = io.sockets.sockets.get(p.socketId);
     if (s) {
-      s.emit('error-msg', 'Room closed due to inactivity');
+      s.emit('session-expired');
       s.leave(room.code);
     }
   }
@@ -233,6 +240,30 @@ function safeParse<T>(schema: z.ZodType<T>, data: unknown): T | null {
   return result.success ? result.data : null;
 }
 
+function parseCookies(header: string | undefined): Record<string, string> {
+  if (!header) return {};
+  const result: Record<string, string> = {};
+  for (const pair of header.split(';')) {
+    const idx = pair.indexOf('=');
+    if (idx > 0) result[pair.slice(0, idx).trim()] = pair.slice(idx + 1).trim();
+  }
+  return result;
+}
+
+function deleteSessionsForPlayer(pid: string): void {
+  for (const [token, s] of sessions) {
+    if (s.playerId === pid) { sessions.delete(token); break; }
+  }
+}
+
+function cancelDisconnectTimer(pid: string): void {
+  const timer = disconnectTimers.get(pid);
+  if (timer) {
+    clearTimeout(timer);
+    disconnectTimers.delete(pid);
+  }
+}
+
 export function setupRoomHandlers(io: Server, socket: Socket): void {
   let currentRoom: Room | null = null;
   let playerId: string | null = null;
@@ -246,14 +277,42 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     handler();
   }
 
+  // --- Session restoration from cookie ---
+  const cookies = parseCookies(socket.handshake.headers.cookie);
+  const incomingToken = cookies['keknames_session'];
+  if (incomingToken) {
+    const session = sessions.get(incomingToken);
+    if (session) {
+      const room = rooms.get(session.roomCode);
+      const player = room?.players.find((p) => p.id === session.playerId);
+      if (room && player) {
+        cancelDisconnectTimer(player.id);
+        player.socketId = socket.id;
+        currentRoom = room;
+        playerId = player.id;
+        socket.join(room.code);
+        touchRoom(room);
+        socket.emit('rejoined', { code: room.code, playerId: player.id, inGame: !!room.game });
+        broadcastLobby(io, room);
+        if (room.game) broadcastState(io, room);
+      } else {
+        sessions.delete(incomingToken);
+        socket.emit('session-expired');
+      }
+    }
+  }
+
   socket.on('create-room', (raw: unknown, cb: unknown) => {
     if (typeof cb !== 'function') return;
     guarded(() => {
+      if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
       const data = safeParse(CreateRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
       const room = createRoom();
+      const pid = randomUUID();
+      const token = randomUUID();
       const player: Player = {
-        id: socket.id, socketId: socket.id,
+        id: pid, socketId: socket.id,
         name: data.name.slice(0, 20), team: null, role: 'operative',
         avatarId: nextAvatarId(room),
       };
@@ -261,8 +320,9 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       room.host = player.id;
       currentRoom = room;
       playerId = player.id;
+      sessions.set(token, { playerId: pid, roomCode: room.code });
       socket.join(room.code);
-      (cb as Function)({ code: room.code });
+      (cb as Function)({ code: room.code, sessionToken: token, playerId: pid });
       broadcastLobby(io, room);
     });
   });
@@ -270,6 +330,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('join-room', (raw: unknown, cb: unknown) => {
     if (typeof cb !== 'function') return;
     guarded(() => {
+      if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
       const data = safeParse(JoinRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
       const roomCode = data.code.toUpperCase();
@@ -280,9 +341,11 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return (cb as Function)({ error: 'Name taken' });
       }
 
+      const pid = randomUUID();
+      const token = randomUUID();
       const joiningMidGame = !!room.game;
       const player: Player = {
-        id: socket.id, socketId: socket.id,
+        id: pid, socketId: socket.id,
         name: data.name.slice(0, 20), team: null,
         role: joiningMidGame ? 'spectator' : 'operative',
         avatarId: nextAvatarId(room),
@@ -290,8 +353,9 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       room.players.push(player);
       currentRoom = room;
       playerId = player.id;
+      sessions.set(token, { playerId: pid, roomCode: room.code });
       socket.join(room.code);
-      (cb as Function)({ code: room.code, inGame: joiningMidGame });
+      (cb as Function)({ code: room.code, inGame: joiningMidGame, sessionToken: token, playerId: pid });
       broadcastLobby(io, room);
 
       if (room.game) {
@@ -605,19 +669,72 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  socket.on('disconnect', () => {
-    if (!currentRoom) return;
-    currentRoom.players = currentRoom.players.filter((p) => p.id !== playerId);
-    if (currentRoom.players.length === 0) {
-      clearRoomTimer(currentRoom);
-      rooms.delete(currentRoom.code);
+  socket.on('leave-room', () => {
+    if (!currentRoom || !playerId) return;
+    const room = currentRoom;
+    const pid = playerId;
+
+    cancelDisconnectTimer(pid);
+    deleteSessionsForPlayer(pid);
+    socket.leave(room.code);
+
+    room.players = room.players.filter((p) => p.id !== pid);
+    if (room.playerA === pid) room.playerA = null;
+    if (room.playerB === pid) room.playerB = null;
+
+    currentRoom = null;
+    playerId = null;
+
+    socket.emit('session-expired');
+
+    if (room.players.length === 0) {
+      clearRoomTimer(room);
+      rooms.delete(room.code);
       return;
     }
-    if (currentRoom.host === playerId) {
-      currentRoom.host = currentRoom.players[0]!.id;
+    if (room.host === pid) room.host = room.players[0]!.id;
+    broadcastLobby(io, room);
+    if (room.game) broadcastState(io, room);
+  });
+
+  socket.on('disconnect', () => {
+    if (!currentRoom || !playerId) return;
+    const room = currentRoom;
+    const pid = playerId;
+
+    const player = room.players.find((p) => p.id === pid);
+    if (player && player.socketId !== socket.id) return;
+
+    const hasSession = [...sessions.values()].some((s) => s.playerId === pid);
+    if (!hasSession) {
+      room.players = room.players.filter((p) => p.id !== pid);
+      if (room.players.length === 0) {
+        clearRoomTimer(room);
+        rooms.delete(room.code);
+        return;
+      }
+      if (room.host === pid) room.host = room.players[0]!.id;
+      broadcastLobby(io, room);
+      if (room.game) broadcastState(io, room);
+      return;
     }
-    broadcastLobby(io, currentRoom);
-    if (currentRoom.game) broadcastState(io, currentRoom);
+
+    const timer = setTimeout(() => {
+      disconnectTimers.delete(pid);
+      deleteSessionsForPlayer(pid);
+      room.players = room.players.filter((p) => p.id !== pid);
+      if (room.players.length === 0) {
+        clearRoomTimer(room);
+        rooms.delete(room.code);
+        return;
+      }
+      if (room.host === pid) room.host = room.players[0]!.id;
+      if (room.playerA === pid) room.playerA = null;
+      if (room.playerB === pid) room.playerB = null;
+      broadcastLobby(io, room);
+      if (room.game) broadcastState(io, room);
+    }, DISCONNECT_GRACE_MS);
+    disconnectTimers.set(pid, timer);
   });
 }
 

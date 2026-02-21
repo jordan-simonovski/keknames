@@ -29,6 +29,7 @@ const io = new Server(server, {
   cors: {
     origin: ALLOWED_ORIGIN ?? true,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
   pingTimeout: 20_000,
   pingInterval: 25_000,

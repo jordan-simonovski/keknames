@@ -19,7 +19,7 @@ export type GameType = 'classic' | 'duet';
 export type DuetCardType = 'green' | 'assassin' | 'neutral';
 export type DuetSide = 'A' | 'B';
 export type Difficulty = 'easy' | 'hard';
-export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'popculture' | 'music' | 'geography' | 'currentaffairs' | 'custom';
+export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'popculture' | 'music' | 'geography' | 'currentaffairs' | 'gilmoregirls' | 'strangerthings' | 'gaming' | 'movies' | 'australia' | 'friends' | 'seinfeld' | 'custom';
 
 export interface BoardConfig {
   readonly rows: number;
@@ -126,7 +126,7 @@ export interface DuetState {
 
 export interface Player {
   readonly id: string;
-  readonly socketId: string;
+  socketId: string;
   name: string;
   team: Team | null;
   role: Role;
@@ -210,7 +210,7 @@ export const SetModeSchema = z.object({
 });
 
 export const SetCategorySchema = z.object({
-  categoryId: z.enum(['observability', 'buzzwords', 'influencers', 'programming', 'startups', 'popculture', 'music', 'geography', 'currentaffairs', 'custom']),
+  categoryId: z.enum(['observability', 'buzzwords', 'influencers', 'programming', 'startups', 'popculture', 'music', 'geography', 'currentaffairs', 'gilmoregirls', 'strangerthings', 'gaming', 'movies', 'australia', 'friends', 'seinfeld', 'custom']),
   difficulty: z.enum(['easy', 'hard']),
 });
 
