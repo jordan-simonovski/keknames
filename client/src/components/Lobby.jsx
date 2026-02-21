@@ -23,7 +23,7 @@ function PlayerCard({ player, canControl, myId, emit }) {
         {player.name}
         {player.isHost && <span className="host-badge">HOST</span>}
       </span>
-      {player.team && (
+      {player.team ? (
         <span
           className={`player-role ${player.role === 'spymaster' ? 'spymaster' : ''}`}
           onClick={canControl ? toggleRole : undefined}
@@ -31,6 +31,8 @@ function PlayerCard({ player, canControl, myId, emit }) {
         >
           {player.role === 'spymaster' ? 'SPYMASTER' : 'operative'}
         </span>
+      ) : (
+        <span className="player-role spectator">spectator</span>
       )}
       {canControl && (
         <span className="team-btns">
@@ -39,6 +41,9 @@ function PlayerCard({ player, canControl, myId, emit }) {
           )}
           {player.team !== 'blue' && (
             <button className="to-blue" onClick={() => moveTo('blue')} title="Blue">B</button>
+          )}
+          {player.team !== null && (
+            <button className="to-spectate" onClick={() => moveTo(null)} title="Spectate">S</button>
           )}
         </span>
       )}
@@ -88,6 +93,18 @@ export default function Lobby() {
                   Pictures
                 </button>
               </div>
+              <div className="timeout-toggle">
+                <span className="timeout-label">Turn Timer:</span>
+                {[0, 60, 120, 180, 300].map((s) => (
+                  <button
+                    key={s}
+                    className={`btn btn-mode ${lobbyState.turnTimeout === s ? 'active' : ''}`}
+                    onClick={() => emit('set-timeout', { seconds: s })}
+                  >
+                    {s === 0 ? 'Off' : `${s / 60}m`}
+                  </button>
+                ))}
+              </div>
               {lobbyState.mode === 'words' && (
                 <details className="wordlist-section">
                   <summary>Custom Word List</summary>
@@ -111,6 +128,12 @@ export default function Lobby() {
           )}
         </div>
 
+        {!isHost && lobbyState.turnTimeout > 0 && (
+          <div className="timeout-display">
+            Turn Timer: {lobbyState.turnTimeout / 60}m
+          </div>
+        )}
+
         <div className="teams-container">
           <div className="team-panel team-red">
             <h3>Red Team</h3>
@@ -120,8 +143,8 @@ export default function Lobby() {
               ))}
             </div>
           </div>
-          <div className="team-panel team-unassigned">
-            <h3>Unassigned</h3>
+          <div className="team-panel team-spectators">
+            <h3>Spectators</h3>
             <div className="player-list">
               {unassigned.map((p) => (
                 <PlayerCard key={p.id} player={p} canControl={isHost || p.id === myId} myId={myId} emit={emit} />

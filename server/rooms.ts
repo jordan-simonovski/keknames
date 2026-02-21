@@ -4,16 +4,19 @@ import type { z } from 'zod';
 import {
   createGame, processGuess, submitClue, endTurn,
   getPlayerView, castVote, getVoteMajority, clearVotes,
+  switchTurn, setDeadline,
 } from './game';
 import { validateWordList, getWordsForGame, CATEGORY_LIST, DEFAULT_CATEGORY, DEFAULT_DIFFICULTY } from './wordlists';
 import type { Room, Player, ChatMessage, Team } from './types';
 import {
   CreateRoomSchema, JoinRoomSchema, AssignTeamSchema,
   SetModeSchema, SetCategorySchema, SetWordlistSchema, GiveClueSchema,
-  CardIndexSchema, SendChatSchema,
+  CardIndexSchema, SendChatSchema, SetTimeoutSchema,
 } from './types';
 
 const rooms = new Map<string, Room>();
+
+const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const ROOM_CODE_LEN = 4;
@@ -72,6 +75,7 @@ function createRoom(): Room {
     categoryId: DEFAULT_CATEGORY,
     difficulty: DEFAULT_DIFFICULTY,
     customWords: null,
+    turnTimeout: 0,
     game: null,
     chatLog: [],
   };
@@ -119,6 +123,7 @@ function broadcastLobby(io: Server, room: Room): void {
     mode: room.mode,
     categoryId: room.categoryId,
     difficulty: room.difficulty,
+    turnTimeout: room.turnTimeout,
     categories: CATEGORY_LIST,
     players: room.players.map((p) => ({
       id: p.id, name: p.name, team: p.team, role: p.role,
@@ -128,6 +133,28 @@ function broadcastLobby(io: Server, room: Room): void {
     inGame: !!room.game,
   };
   io.to(room.code).emit('lobby-state', data);
+}
+
+function clearRoomTimer(room: Room): void {
+  const existing = roomTimers.get(room.code);
+  if (existing) {
+    clearInterval(existing);
+    roomTimers.delete(room.code);
+  }
+}
+
+function startRoomTimer(io: Server, room: Room): void {
+  clearRoomTimer(room);
+  if (room.turnTimeout === 0) return;
+  const interval = setInterval(() => {
+    const game = room.game;
+    if (!game || game.winner || game.turnDeadline === null) return;
+    if (Date.now() < game.turnDeadline) return;
+    switchTurn(game);
+    setDeadline(game, room.turnTimeout * 1000);
+    broadcastState(io, room);
+  }, 1_000);
+  roomTimers.set(room.code, interval);
 }
 
 function safeParse<T>(schema: z.ZodType<T>, data: unknown): T | null {
@@ -181,16 +208,18 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return (cb as Function)({ error: 'Name taken' });
       }
 
+      const joiningMidGame = !!room.game;
       const player: Player = {
         id: socket.id, socketId: socket.id,
-        name: data.name.slice(0, 20), team: null, role: 'operative',
+        name: data.name.slice(0, 20), team: null,
+        role: joiningMidGame ? 'spectator' : 'operative',
         avatarId: nextAvatarId(room),
       };
       room.players.push(player);
       currentRoom = room;
       playerId = player.id;
       socket.join(room.code);
-      (cb as Function)({ code: room.code, inGame: !!room.game });
+      (cb as Function)({ code: room.code, inGame: joiningMidGame });
       broadcastLobby(io, room);
 
       if (room.game) {
@@ -219,8 +248,15 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       if (!data) return;
       const p = currentRoom.players.find((pl) => pl.id === data.targetId);
       if (!p) return;
-      if (data.team !== undefined) p.team = data.team;
-      if (data.role !== undefined) p.role = data.role;
+      if (data.team !== undefined) {
+        p.team = data.team;
+        if (data.team === null) {
+          p.role = 'spectator';
+        } else if (p.role === 'spectator') {
+          p.role = 'operative';
+        }
+      }
+      if (data.role !== undefined && p.team !== null) p.role = data.role;
       broadcastLobby(io, currentRoom);
     });
   });
@@ -243,6 +279,16 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       currentRoom.categoryId = data.categoryId;
       currentRoom.difficulty = data.difficulty;
       if (data.categoryId !== 'custom') currentRoom.customWords = null;
+      broadcastLobby(io, currentRoom);
+    });
+  });
+
+  socket.on('set-timeout', (raw: unknown) => {
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      const data = safeParse(SetTimeoutSchema, raw);
+      if (!data) return;
+      currentRoom.turnTimeout = data.seconds;
       broadcastLobby(io, currentRoom);
     });
   });
@@ -286,6 +332,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       }
       const words = getWordsForGame(currentRoom.categoryId, currentRoom.difficulty, currentRoom.customWords);
       currentRoom.game = createGame(currentRoom.mode, words);
+      setDeadline(currentRoom.game, currentRoom.turnTimeout * 1000);
+      startRoomTimer(io, currentRoom);
       broadcastState(io, currentRoom);
     });
   });
@@ -299,6 +347,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       if (!data) return socket.emit('error-msg', 'Invalid clue');
       const result = submitClue(currentRoom.game, me.team, data.word, data.count);
       if ('error' in result) return socket.emit('error-msg', result.error);
+      setDeadline(currentRoom.game, currentRoom.turnTimeout * 1000);
       broadcastState(io, currentRoom);
     });
   });
@@ -337,6 +386,10 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       }
       const result = processGuess(currentRoom.game, data.cardIndex, me.team);
       if ('error' in result) return socket.emit('error-msg', result.error);
+      const gameOver = result.result === 'assassin' || result.result === 'win';
+      if ('switchedTo' in result || gameOver) {
+        setDeadline(currentRoom.game, gameOver ? 0 : currentRoom.turnTimeout * 1000);
+      }
       broadcastState(io, currentRoom);
     });
   });
@@ -348,6 +401,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       if (!me || !me.team) return;
       const result = endTurn(currentRoom.game, me.team);
       if ('error' in result) return socket.emit('error-msg', result.error);
+      setDeadline(currentRoom.game, currentRoom.turnTimeout * 1000);
       broadcastState(io, currentRoom);
     });
   });
@@ -375,6 +429,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('play-again', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
+      clearRoomTimer(currentRoom);
       currentRoom.game = null;
       broadcastLobby(io, currentRoom);
     });
@@ -384,6 +439,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     if (!currentRoom) return;
     currentRoom.players = currentRoom.players.filter((p) => p.id !== playerId);
     if (currentRoom.players.length === 0) {
+      clearRoomTimer(currentRoom);
       rooms.delete(currentRoom.code);
       return;
     }

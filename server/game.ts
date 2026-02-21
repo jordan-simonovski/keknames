@@ -77,6 +77,7 @@ export function createGame(mode: GameMode, wordPool: string[]): GameState {
     winner: null,
     log: [],
     votes: {},
+    turnDeadline: null,
   };
 }
 
@@ -119,7 +120,11 @@ export function clearVotes(game: GameState): void {
   game.votes = {};
 }
 
-function switchTurn(game: GameState): void {
+export function setDeadline(game: GameState, timeoutMs: number): void {
+  game.turnDeadline = timeoutMs > 0 ? Date.now() + timeoutMs : null;
+}
+
+export function switchTurn(game: GameState): void {
   game.currentTeam = game.currentTeam === 'red' ? 'blue' : 'red';
   game.phase = 'spymaster';
   game.currentClue = null;
@@ -229,5 +234,6 @@ export function getPlayerView(game: GameState, role: Role) {
     winner: game.winner,
     log: game.log,
     votes: game.phase === 'operative' ? game.votes : {},
+    turnDeadline: game.turnDeadline,
   };
 }

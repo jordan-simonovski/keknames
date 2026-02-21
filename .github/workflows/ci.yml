@@ -26,18 +26,18 @@ jobs:
       - run: npm run test
       - run: npm run build
 
-  deploy:
-    name: Deploy to Railway
-    needs: [ci]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy
-        uses: docker://ghcr.io/railwayapp/cli:latest
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        with:
-          args: up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+  # deploy:
+  #   name: Deploy to Railway
+  #   needs: [ci]
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: production
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Deploy
+  #       uses: docker://ghcr.io/railwayapp/cli:latest
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  #       with:
+  #         args: up --service ${{ secrets.RAILWAY_SERVICE_ID }}

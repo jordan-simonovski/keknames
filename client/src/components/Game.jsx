@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useSocket } from '../useSocket';
 import Board from './Board';
 import TeamPanel from './TeamPanel';
@@ -68,15 +68,37 @@ export default function Game() {
     }
   }, [gameState, me, emit]);
 
+  const [timeLeft, setTimeLeft] = useState(null);
+  const deadlineRef = useRef(null);
+
+  useEffect(() => {
+    const deadline = gameState?.turnDeadline ?? null;
+    deadlineRef.current = deadline;
+    if (deadline === null) {
+      setTimeLeft(null);
+      return;
+    }
+    function tick() {
+      const dl = deadlineRef.current;
+      if (dl === null) { setTimeLeft(null); return; }
+      setTimeLeft(Math.max(0, Math.ceil((dl - Date.now()) / 1000)));
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [gameState?.turnDeadline]);
+
   if (!gameState || !me) return null;
 
-  const isMyTurn = gameState.currentTeam === me.team && !gameState.winner;
+  const isSpectator = me.team === null;
+  const isMyTurn = !isSpectator && gameState.currentTeam === me.team && !gameState.winner;
   const isSpymaster = me.role === 'spymaster';
   const isSolo = me.isSolo;
 
   const players = gameState.players || [];
   const redPlayers = players.filter((p) => p.team === 'red');
   const bluePlayers = players.filter((p) => p.team === 'blue');
+  const spectators = players.filter((p) => p.team === null);
 
   function handleGiveClue() {
     const word = clueWord.trim();
@@ -99,7 +121,12 @@ export default function Game() {
             <span className={`turn-indicator team-${gameState.currentTeam}`}>{turnLabel}</span>
             <span className="blue-score">{gameState.blueRemaining} blue</span>
           </div>
-          <span className="top-bar-spacer" />
+          {timeLeft !== null && !gameState.winner && (
+            <span className={`turn-timer ${timeLeft <= 30 ? 'warning' : ''}`}>
+              {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+            </span>
+          )}
+          {isSpectator && <span className="spectator-badge">SPECTATING</span>}
         </div>
         {gameState.currentClue && (
           <div className="clue-display">
@@ -115,14 +142,33 @@ export default function Game() {
         <div className="board-wrapper">
           <Board
             gameState={gameState}
-            isSpymaster={isSpymaster}
+            isSpymaster={isSpymaster && !isSpectator}
             voteInfo={voteInfo}
-            onCardClick={handleCardClick}
+            onCardClick={isSpectator ? undefined : handleCardClick}
           />
         </div>
 
         <div className="right-column">
           <TeamPanel team="blue" players={bluePlayers} remaining={gameState.blueRemaining} label="remaining" />
+          {spectators.length > 0 && (
+            <div className="game-team-panel team-spectators">
+              <div className="panel-section">
+                <div className="panel-section-title">Spectators</div>
+                {spectators.map((p) => (
+                  <div key={p.id} className="panel-player">
+                    {p.avatarId && (
+                      <img
+                        className="panel-avatar"
+                        src={`/assets/ui/avatar_${String(p.avatarId).padStart(2, '0')}.png`}
+                        alt=""
+                      />
+                    )}
+                    <span className="panel-player-name">{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="right-tabs">
             <div className="tab-bar">
               <button className={`tab ${rightTab === 'chat' ? 'active' : ''}`} onClick={() => setRightTab('chat')}>Chat</button>
@@ -136,7 +182,7 @@ export default function Game() {
       </div>
 
       <div className="game-controls">
-        {isSpymaster && isMyTurn && gameState.phase === 'spymaster' && (
+        {!isSpectator && isSpymaster && isMyTurn && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
             <input
               type="text"
@@ -157,7 +203,7 @@ export default function Game() {
             <button className="btn btn-primary" onClick={handleGiveClue}>Give Clue</button>
           </div>
         )}
-        {isMyTurn && gameState.phase === 'operative' && (!isSpymaster || isSolo) && (
+        {!isSpectator && isMyTurn && gameState.phase === 'operative' && (!isSpymaster || isSolo) && (
           <div className="operative-controls">
             <button className="btn btn-secondary" onClick={() => emit('end-turn')}>End Turn</button>
           </div>

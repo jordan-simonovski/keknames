@@ -11,7 +11,8 @@ export const CARD_TYPES = {
 
 export type CardType = (typeof CARD_TYPES)[keyof typeof CARD_TYPES];
 export type Team = 'red' | 'blue';
-export type Role = 'spymaster' | 'operative';
+export type Role = 'spymaster' | 'operative' | 'spectator';
+export type TurnTimeout = 0 | 60 | 120 | 180 | 300;
 export type Phase = 'spymaster' | 'operative' | 'gameover';
 export type GameMode = 'words' | 'pictures';
 export type Difficulty = 'easy' | 'hard';
@@ -68,6 +69,7 @@ export interface GameState {
   winner: Team | null;
   log: LogEntry[];
   votes: Record<string, string[]>;
+  turnDeadline: number | null;
 }
 
 // --- Players & Rooms ---
@@ -97,6 +99,7 @@ export interface Room {
   categoryId: CategoryId;
   difficulty: Difficulty;
   customWords: string[] | null;
+  turnTimeout: TurnTimeout;
   game: GameState | null;
   chatLog: ChatMessage[];
 }
@@ -137,7 +140,7 @@ export const JoinRoomSchema = z.object({
 export const AssignTeamSchema = z.object({
   targetId: z.string().min(1).max(100),
   team: z.enum(['red', 'blue']).nullable().optional(),
-  role: z.enum(['spymaster', 'operative']).optional(),
+  role: z.enum(['spymaster', 'operative', 'spectator']).optional(),
 });
 
 export const SetModeSchema = z.object({
@@ -160,6 +163,10 @@ export const GiveClueSchema = z.object({
 
 export const CardIndexSchema = z.object({
   cardIndex: z.number().int().min(0).max(24),
+});
+
+export const SetTimeoutSchema = z.object({
+  seconds: z.union([z.literal(0), z.literal(60), z.literal(120), z.literal(180), z.literal(300)]),
 });
 
 export const SendChatSchema = z.object({
