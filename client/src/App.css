@@ -82,9 +82,10 @@ input:focus, textarea:focus { border-color: var(--gold); }
 }
 
 /* --- LANDING --- */
-.landing-screen { align-items: center; justify-content: center; }
+.landing-screen { align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .landing-container {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
+  position: relative; z-index: 2;
 }
 .logo {
   font-size: 4rem; font-weight: 900; letter-spacing: 8px;
@@ -96,6 +97,27 @@ input:focus, textarea:focus { border-color: var(--gold); }
 .landing-form { display: flex; flex-direction: column; gap: 12px; width: 300px; }
 .join-row { display: flex; gap: 8px; }
 .join-row input { flex: 1; text-transform: uppercase; }
+
+.floating-backdrop {
+  position: absolute; inset: 0; z-index: 1;
+  pointer-events: none; overflow: hidden;
+}
+
+.floating-avatar {
+  position: absolute;
+  opacity: 0;
+  filter: blur(0.5px) saturate(0.7);
+  animation: floatFade var(--duration, 8s) ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes floatFade {
+  0%   { opacity: 0; transform: translateY(0) translateX(0) scale(0.8) rotate(-5deg); }
+  20%  { opacity: 0.18; }
+  50%  { opacity: 0.25; transform: translateY(var(--drift, -20px)) translateX(calc(var(--drift, -20px) * -0.5)) scale(1) rotate(3deg); }
+  80%  { opacity: 0.18; }
+  100% { opacity: 0; transform: translateY(0) translateX(0) scale(0.8) rotate(-5deg); }
+}
 
 /* --- LOBBY --- */
 .lobby-screen { overflow-y: auto; }

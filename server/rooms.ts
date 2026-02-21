@@ -17,12 +17,14 @@ import {
 const rooms = new Map<string, Room>();
 
 const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
+const roomLastActivity = new Map<string, number>();
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const ROOM_CODE_LEN = 4;
 const MAX_PLAYERS = 10;
 const MAX_CHAT_LOG = 200;
 const MAX_AVATAR_ID = 8;
+const ROOM_IDLE_TTL_MS = 30 * 60 * 1000;
 
 // Per-socket rate limiting: max events per window
 const RATE_LIMIT_WINDOW_MS = 1_000;
@@ -44,6 +46,23 @@ function checkRateLimit(socket: Socket): boolean {
   }
   bucket.count++;
   return bucket.count <= RATE_LIMIT_MAX_EVENTS;
+}
+
+function touchRoom(room: Room): void {
+  roomLastActivity.set(room.code, Date.now());
+}
+
+function destroyRoom(room: Room, io: Server): void {
+  clearRoomTimer(room);
+  roomLastActivity.delete(room.code);
+  for (const p of room.players) {
+    const s = io.sockets.sockets.get(p.socketId);
+    if (s) {
+      s.emit('error-msg', 'Room closed due to inactivity');
+      s.leave(room.code);
+    }
+  }
+  rooms.delete(room.code);
 }
 
 function generateCode(): string {
@@ -171,6 +190,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       socket.emit('error-msg', 'Rate limit exceeded');
       return;
     }
+    if (currentRoom) touchRoom(currentRoom);
     handler();
   }
 
@@ -449,4 +469,16 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     broadcastLobby(io, currentRoom);
     if (currentRoom.game) broadcastState(io, currentRoom);
   });
+}
+
+export function startIdleSweep(io: Server): void {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [code, room] of rooms) {
+      const last = roomLastActivity.get(code) ?? 0;
+      if (now - last >= ROOM_IDLE_TTL_MS) {
+        destroyRoom(room, io);
+      }
+    }
+  }, 60_000);
 }

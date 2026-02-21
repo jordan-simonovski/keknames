@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import helmet from 'helmet';
 import { Server } from 'socket.io';
-import { setupRoomHandlers } from './rooms';
+import { setupRoomHandlers, startIdleSweep } from './rooms';
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
 
@@ -48,6 +48,8 @@ app.get('*', (_req, res) => {
 io.on('connection', (socket) => {
   setupRoomHandlers(io, socket);
 });
+
+startIdleSweep(io);
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 server.listen(PORT, () => {
