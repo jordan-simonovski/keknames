@@ -593,7 +593,44 @@ export default function Game() {
         )}
         {!isSpectator && isMyTurn && classic.phase === 'operative' && (!isSpymaster || isSolo) && (
           <div className="operative-controls">
-            <span className="turn-prompt">Your turn — pick a card</span>
+            {isSolo ? (
+              <span className="turn-prompt">Your turn — pick a card</span>
+            ) : (
+              (() => {
+                const majority = getMajority(classic.votes);
+                const myVote = getMyVote(classic.votes, me.id);
+                const totalVoters = Object.values(classic.votes || {}).reduce(
+                  (s, v) => { v.forEach((id) => { if (!s.has(id)) s.add(id); }); return s; },
+                  new Set<string>(),
+                ).size;
+                const majorityWord = majority !== null ? classic.cards[majority]?.content : null;
+                return (
+                  <>
+                    {majority === null && myVote === null && (
+                      <span className="turn-prompt">Click a card to vote</span>
+                    )}
+                    {majority === null && myVote !== null && (
+                      <span className="vote-status">
+                        Voted — waiting for others ({totalVoters} voted)
+                      </span>
+                    )}
+                    {majority !== null && myVote !== majority && (
+                      <span className="vote-status vote-majority">
+                        Majority on <strong>{majorityWord}</strong> — click it to agree
+                      </span>
+                    )}
+                    {majority !== null && myVote === majority && (
+                      <button
+                        className="btn btn-primary btn-confirm-guess"
+                        onClick={() => emit('make-guess', { cardIndex: majority })}
+                      >
+                        Confirm: {majorityWord}
+                      </button>
+                    )}
+                  </>
+                );
+              })()
+            )}
             <button className="btn btn-secondary" onClick={() => emit('end-turn')}>
               End Turn
             </button>

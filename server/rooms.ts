@@ -559,8 +559,9 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
       const reds = currentRoom.players.filter((p) => p.team === 'red');
       const blues = currentRoom.players.filter((p) => p.team === 'blue');
-      if (reds.length < 1 || blues.length < 1) {
-        socket.emit('error-msg', 'Each team needs at least 1 player');
+      const minPerTeam = process.env.NODE_ENV === 'development' ? 1 : 2;
+      if (reds.length < minPerTeam || blues.length < minPerTeam) {
+        socket.emit('error-msg', `Each team needs at least ${minPerTeam} players`);
         return;
       }
       if (!reds.find((p) => p.role === 'spymaster') || !blues.find((p) => p.role === 'spymaster')) {

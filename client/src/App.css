@@ -859,6 +859,17 @@ select option {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+.vote-status {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-right: 4px;
+}
+.vote-status.vote-majority {
+  color: var(--gold);
+}
+.btn-confirm-guess {
+  animation: prompt-pulse 1.5s ease-in-out infinite;
+}
 
 /* --- Game Over Overlay --- */
 .overlay {
