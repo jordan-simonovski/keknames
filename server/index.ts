@@ -37,7 +37,7 @@ const io = new Server(server, {
   pingInterval: 25_000,
 });
 
-const clientDist = path.join(__dirname, '..', 'client', 'dist');
+const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 app.use(express.static(clientDist, { dotfiles: 'ignore' }));
 
 app.get('/health', (_req, res) => {
