@@ -7,6 +7,7 @@ type Screen = 'landing' | 'lobby' | 'game';
 export interface SocketContextValue {
   socket: Socket | null;
   connected: boolean;
+  disconnected: boolean;
   screen: Screen;
   setScreen: (s: Screen) => void;
   lobbyState: LobbyState | null;
@@ -34,6 +35,7 @@ function clearSessionCookie() {
 export function SocketProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const everConnected = useRef(false);
   const [screen, setScreen] = useState<Screen>('landing');
   const [lobbyState, setLobbyState] = useState<LobbyState | null>(null);
   const [gameState, setGameState] = useState<GameViewPayload | null>(null);
@@ -47,6 +49,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      everConnected.current = true;
       setConnected(true);
     });
 
@@ -156,6 +159,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const value: SocketContextValue = {
     socket: socketRef.current,
     connected,
+    disconnected: everConnected.current && !connected,
     screen,
     setScreen,
     lobbyState,

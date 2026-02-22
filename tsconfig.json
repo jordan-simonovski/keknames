@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
-    "rootDir": "server",
+    "rootDir": ".",
     "declaration": true,
     "sourceMap": true,
     "noUncheckedIndexedAccess": true,
@@ -16,6 +16,6 @@
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false
   },
-  "include": ["server/**/*.ts"],
+  "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "client"]
 }

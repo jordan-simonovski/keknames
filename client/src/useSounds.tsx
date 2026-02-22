@@ -202,19 +202,20 @@ export function useTickSound(timeLeft: number | null, muted: boolean) {
 }
 
 export function useTimeUpSound(timeLeft: number | null, play: (name: SoundName) => void) {
-  const firedRef = useRef(false);
+  const prevRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (timeLeft === null) {
-      firedRef.current = false;
+    const prev = prevRef.current;
+    prevRef.current = timeLeft;
+
+    if (timeLeft === 0) {
+      play('timeUp');
       return;
     }
-    if (timeLeft === 0 && !firedRef.current) {
-      firedRef.current = true;
+
+    // Server skips turn before client hits 0: prev was small and now it jumped
+    if (prev !== null && prev <= 3 && (timeLeft === null || timeLeft > prev + 10)) {
       play('timeUp');
-    }
-    if (timeLeft > 0) {
-      firedRef.current = false;
     }
   }, [timeLeft, play]);
 }

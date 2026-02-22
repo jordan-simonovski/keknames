@@ -26,10 +26,10 @@ const PICTURES_CONFIG: BoardConfig = {
 const WORDS_CONFIG: BoardConfig = { rows: 5, cols: 5, total: 25, starting: 9, other: 8, bystanders: 7, assassins: 1 };
 
 const VARIANT_COUNTS: Record<CardType, number> = {
-  red: 5,
-  blue: 5,
-  bystander: 5,
-  assassin: 2,
+  red: 9,
+  blue: 9,
+  bystander: 8,
+  assassin: 3,
 };
 
 function cryptoShuffle<T>(arr: readonly T[]): T[] {

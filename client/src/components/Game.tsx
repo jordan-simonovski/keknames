@@ -10,6 +10,8 @@ import RoundSplash from './RoundSplash';
 import RulesModal from './RulesModal';
 import type { DuetGameView, ClassicGameView, GameViewPayload } from '@shared/types';
 import { avatarUrl } from '@shared/constants';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faVolumeHigh, faVolumeXmark, faMusic } from '@fortawesome/free-solid-svg-icons';
 
 function InfoButton({ onClick }: { onClick: () => void }) {
   return (
@@ -186,10 +188,10 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
             </span>
           )}
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute SFX' : 'Mute SFX'}>
-            {muted ? '\u{1F507}' : '\u{1F50A}'}
+            <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
           </button>
-          <button className="btn btn-mute" onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
-            {musicMuted ? '\u{1F3B5}' : '\u{1F3B6}'}
+          <button className={`btn btn-mute${musicMuted ? ' muted' : ''}`} onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
+            <FontAwesomeIcon icon={faMusic} />
           </button>
           <button
             className="rules-btn"
@@ -467,10 +469,10 @@ export default function Game() {
             </span>
           )}
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute SFX' : 'Mute SFX'}>
-            {muted ? '\u{1F507}' : '\u{1F50A}'}
+            <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
           </button>
-          <button className="btn btn-mute" onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
-            {musicMuted ? '\u{1F3B5}' : '\u{1F3B6}'}
+          <button className={`btn btn-mute${musicMuted ? ' muted' : ''}`} onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
+            <FontAwesomeIcon icon={faMusic} />
           </button>
           <button
             className="rules-btn"
@@ -485,6 +487,11 @@ export default function Game() {
             LEAVE
           </button>
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
+          {!isSpectator && me.team && (
+            <span className={`team-badge team-badge-${me.team}`}>
+              You are {me.team.toUpperCase()} {me.role === 'spymaster' ? '(Spymaster)' : ''}
+            </span>
+          )}
         </div>
         {classic.currentClue && (
           <div className="clue-display">

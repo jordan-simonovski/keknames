@@ -20,6 +20,7 @@ export type DuetCardType = 'green' | 'assassin' | 'neutral';
 export type DuetSide = 'A' | 'B';
 export type Difficulty = 'easy' | 'hard';
 export type CategoryId =
+  | 'standard'
   | 'observability'
   | 'buzzwords'
   | 'influencers'
@@ -36,6 +37,10 @@ export type CategoryId =
   | 'australia'
   | 'friends'
   | 'seinfeld'
+  | 'dnd'
+  | 'nineties'
+  | 'fastfood'
+  | 'pokemon'
   | 'custom';
 
 export interface BoardConfig {
