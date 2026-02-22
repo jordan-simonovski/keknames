@@ -72,13 +72,21 @@ export function createGame(mode: GameMode, wordPool: string[]): GameState {
     cardContents = cryptoShuffle(wordPool).slice(0, config.total);
   }
 
-  const cards: Card[] = cardContents.map((content, i) => ({
-    id: i,
-    content,
-    type: keyCard[i]!,
-    revealed: false,
-    typeVariant: randomInt(1, VARIANT_COUNTS[keyCard[i]!] + 1),
-  }));
+  const variantPools: Record<string, number[]> = {};
+  for (const [type, count] of Object.entries(VARIANT_COUNTS)) {
+    const pool = Array.from({ length: count }, (_, i) => i + 1);
+    variantPools[type] = cryptoShuffle(pool);
+  }
+  const variantIndex: Record<string, number> = {};
+
+  const cards: Card[] = cardContents.map((content, i) => {
+    const type = keyCard[i]!;
+    const idx = variantIndex[type] ?? 0;
+    variantIndex[type] = idx + 1;
+    const pool = variantPools[type]!;
+    const variant = pool[idx % pool.length]!;
+    return { id: i, content, type, revealed: false, typeVariant: variant };
+  });
 
   return {
     mode,
