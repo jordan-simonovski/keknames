@@ -714,6 +714,42 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
       clearRoomTimer(currentRoom);
+
+      if (currentRoom.gameType === 'duet') {
+        if (!currentRoom.playerA || !currentRoom.playerB) {
+          currentRoom.game = null;
+          broadcastLobby(io, currentRoom);
+          return;
+        }
+        const words = getWordsForGame(currentRoom.categoryId, currentRoom.difficulty, currentRoom.customWords);
+        currentRoom.game = createDuetGame(words);
+        setDuetDeadline(currentRoom.game as DuetState, currentRoom.turnTimeout * 1000);
+        startRoomTimer(io, currentRoom);
+        broadcastState(io, currentRoom);
+        return;
+      }
+
+      const reds = currentRoom.players.filter((p) => p.team === 'red');
+      const blues = currentRoom.players.filter((p) => p.team === 'blue');
+      const hasTeams = reds.length >= 1 && blues.length >= 1;
+      const hasSpymasters = !!reds.find((p) => p.role === 'spymaster') && !!blues.find((p) => p.role === 'spymaster');
+      if (!hasTeams || !hasSpymasters) {
+        currentRoom.game = null;
+        broadcastLobby(io, currentRoom);
+        return;
+      }
+      const words = getWordsForGame(currentRoom.categoryId, currentRoom.difficulty, currentRoom.customWords);
+      currentRoom.game = createGame(currentRoom.mode, words);
+      setDeadline(currentRoom.game as GameState, currentRoom.turnTimeout * 1000);
+      startRoomTimer(io, currentRoom);
+      broadcastState(io, currentRoom);
+    });
+  });
+
+  socket.on('back-to-lobby', () => {
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      clearRoomTimer(currentRoom);
       currentRoom.game = null;
       broadcastLobby(io, currentRoom);
     });

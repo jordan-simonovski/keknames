@@ -354,9 +354,31 @@ export default function Lobby() {
 
         {isHost && (
           <div className="lobby-actions">
-            <button className="btn btn-primary btn-start" onClick={() => emit('start-game')}>
-              Start Game
-            </button>
+            {(() => {
+              let reason = '';
+              if (lobbyState.gameType === 'duet') {
+                if (!lobbyState.playerA || !lobbyState.playerB) reason = 'Assign both Player A and Player B';
+              } else {
+                const hasReds = reds.length >= 1;
+                const hasBlues = blues.length >= 1;
+                const redSpy = reds.some((p) => p.role === 'spymaster');
+                const blueSpy = blues.some((p) => p.role === 'spymaster');
+                if (!hasReds || !hasBlues) reason = 'Each team needs at least 1 player';
+                else if (!redSpy || !blueSpy) reason = 'Each team needs a spymaster';
+              }
+              return (
+                <>
+                  <button
+                    className="btn btn-primary btn-start"
+                    disabled={!!reason}
+                    onClick={() => emit('start-game')}
+                  >
+                    Start Game
+                  </button>
+                  {reason && <span className="start-hint">{reason}</span>}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

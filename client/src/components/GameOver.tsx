@@ -27,7 +27,7 @@ export default function GameOver({ state }: GameOverProps) {
             <button className="btn btn-primary" onClick={() => emit('play-again')}>
               Play Again
             </button>
-            <button className="btn btn-secondary" onClick={() => emit('play-again')}>
+            <button className="btn btn-secondary" onClick={() => emit('back-to-lobby')}>
               Back to Lobby
             </button>
           </>

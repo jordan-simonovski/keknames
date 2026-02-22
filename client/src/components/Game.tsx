@@ -262,6 +262,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
       <div className="game-controls">
         {!isSpectator && amClueGiver && !isOver && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
+            <span className="turn-prompt">Your turn — give a clue</span>
             <InfoButton
               onClick={() => {
                 setRulesSpymaster(true);
@@ -291,6 +292,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
         )}
         {!isSpectator && amGuesser && !isOver && gameState.phase === 'operative' && (
           <div className="operative-controls">
+            <span className="turn-prompt">Your turn — pick a card</span>
             <button className="btn btn-secondary" onClick={() => emit('end-turn')}>
               End Turn
             </button>
@@ -322,10 +324,16 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
           <h2>{gameState.winner === 'win' ? 'Victory' : 'Defeat'}</h2>
           <p>{gameState.winner === 'win' ? 'All agents found.' : 'Mission failed.'}</p>
           {me.isHost && (
-            <button className="btn btn-primary" onClick={() => emit('play-again')}>
-              Play Again
-            </button>
+            <>
+              <button className="btn btn-primary" onClick={() => emit('play-again')}>
+                Play Again
+              </button>
+              <button className="btn btn-secondary" onClick={() => emit('back-to-lobby')}>
+                Back to Lobby
+              </button>
+            </>
           )}
+          {!me.isHost && <p className="waiting-host">Waiting for host...</p>}
         </div>
       )}
     </div>
@@ -555,6 +563,7 @@ export default function Game() {
       <div className="game-controls">
         {!isSpectator && isSpymaster && isMyTurn && classic.phase === 'spymaster' && (
           <div className="spymaster-controls">
+            <span className="turn-prompt">Your turn — give a clue</span>
             <InfoButton
               onClick={() => {
                 setRulesSpymaster(true);
@@ -584,6 +593,7 @@ export default function Game() {
         )}
         {!isSpectator && isMyTurn && classic.phase === 'operative' && (!isSpymaster || isSolo) && (
           <div className="operative-controls">
+            <span className="turn-prompt">Your turn — pick a card</span>
             <button className="btn btn-secondary" onClick={() => emit('end-turn')}>
               End Turn
             </button>

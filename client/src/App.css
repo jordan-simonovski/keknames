@@ -454,6 +454,16 @@ select option {
   font-size: 1.1rem;
   padding: 12px 40px;
 }
+.btn-start:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.start-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--gold);
+}
 
 /* --- GAME SCREEN --- */
 .game-screen {
@@ -836,6 +846,18 @@ select option {
 .operative-controls {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+.turn-prompt {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gold);
+  animation: prompt-pulse 2s ease-in-out infinite;
+  margin-right: 4px;
+}
+@keyframes prompt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* --- Game Over Overlay --- */
