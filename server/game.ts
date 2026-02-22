@@ -1,18 +1,35 @@
 import { randomInt } from 'node:crypto';
 import type {
-  BoardConfig, Card, CardType, Team, GameState, GameMode,
-  ErrorResult, GuessResult, OkResult, Phase, Role,
+  BoardConfig,
+  Card,
+  CardType,
+  Team,
+  GameState,
+  GameMode,
+  ErrorResult,
+  GuessResult,
+  OkResult,
+  Phase,
+  Role,
 } from './types';
 import { CARD_TYPES } from './types';
 
-const PICTURES_CONFIG: BoardConfig = { rows: 4, cols: 5, total: 20, starting: 8, other: 7, bystanders: 4, assassins: 1 };
+const PICTURES_CONFIG: BoardConfig = {
+  rows: 4,
+  cols: 5,
+  total: 20,
+  starting: 8,
+  other: 7,
+  bystanders: 4,
+  assassins: 1,
+};
 const WORDS_CONFIG: BoardConfig = { rows: 5, cols: 5, total: 25, starting: 9, other: 8, bystanders: 7, assassins: 1 };
 
 const VARIANT_COUNTS: Record<CardType, number> = {
-  red: 3,
-  blue: 3,
-  bystander: 3,
-  assassin: 1,
+  red: 5,
+  blue: 5,
+  bystander: 5,
+  assassin: 2,
 };
 
 function cryptoShuffle<T>(arr: readonly T[]): T[] {
@@ -81,9 +98,7 @@ export function createGame(mode: GameMode, wordPool: string[]): GameState {
   };
 }
 
-export function castVote(
-  game: GameState, cardIndex: number, playerId: string,
-): ErrorResult | OkResult {
+export function castVote(game: GameState, cardIndex: number, playerId: string): ErrorResult | OkResult {
   if (game.winner) return { error: 'Game is over' };
   if (game.phase !== 'operative') return { error: 'Not guessing phase' };
   const card = game.cards[cardIndex];
@@ -132,9 +147,7 @@ export function switchTurn(game: GameState): void {
   clearVotes(game);
 }
 
-export function processGuess(
-  game: GameState, cardIndex: number, team: Team,
-): ErrorResult | GuessResult {
+export function processGuess(game: GameState, cardIndex: number, team: Team): ErrorResult | GuessResult {
   if (game.winner) return { error: 'Game is over' };
   if (game.phase !== 'operative') return { error: 'Not guessing phase' };
   if (game.currentTeam !== team) return { error: 'Not your turn' };
@@ -182,9 +195,7 @@ export function processGuess(
   return { result: 'correct' };
 }
 
-export function submitClue(
-  game: GameState, team: Team, word: string, count: number,
-): ErrorResult | OkResult {
+export function submitClue(game: GameState, team: Team, word: string, count: number): ErrorResult | OkResult {
   if (game.winner) return { error: 'Game is over' };
   if (game.phase !== 'spymaster') return { error: 'Not clue phase' };
   if (game.currentTeam !== team) return { error: 'Not your turn' };

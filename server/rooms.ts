@@ -2,20 +2,40 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import type { z } from 'zod';
 import {
-  createGame, processGuess, submitClue, endTurn,
-  getPlayerView, castVote, getVoteMajority, clearVotes,
-  switchTurn, setDeadline,
+  createGame,
+  processGuess,
+  submitClue,
+  endTurn,
+  getPlayerView,
+  castVote,
+  getVoteMajority,
+  clearVotes,
+  switchTurn,
+  setDeadline,
 } from './game';
 import {
-  createDuetGame, submitDuetClue, processDuetGuess,
-  endDuetTurn, getDuetPlayerView, setDuetDeadline, skipDuetTurn,
+  createDuetGame,
+  submitDuetClue,
+  processDuetGuess,
+  endDuetTurn,
+  getDuetPlayerView,
+  setDuetDeadline,
+  skipDuetTurn,
 } from './duet';
 import { validateWordList, getWordsForGame, CATEGORY_LIST, DEFAULT_CATEGORY, DEFAULT_DIFFICULTY } from './wordlists';
 import type { Room, Player, ChatMessage, Team, DuetState, GameState, DuetSide } from './types';
 import {
-  CreateRoomSchema, JoinRoomSchema, AssignTeamSchema,
-  SetModeSchema, SetCategorySchema, SetWordlistSchema, GiveClueSchema,
-  CardIndexSchema, SendChatSchema, SetTimeoutSchema, SetGameTypeSchema,
+  CreateRoomSchema,
+  JoinRoomSchema,
+  AssignTeamSchema,
+  SetModeSchema,
+  SetCategorySchema,
+  SetWordlistSchema,
+  GiveClueSchema,
+  CardIndexSchema,
+  SendChatSchema,
+  SetTimeoutSchema,
+  SetGameTypeSchema,
 } from './types';
 
 const rooms = new Map<string, Room>();
@@ -23,7 +43,10 @@ const rooms = new Map<string, Room>();
 const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
 const roomLastActivity = new Map<string, number>();
 
-interface Session { playerId: string; roomCode: string }
+interface Session {
+  playerId: string;
+  roomCode: string;
+}
 const sessions = new Map<string, Session>();
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DISCONNECT_GRACE_MS = 60_000;
@@ -131,15 +154,18 @@ function getDuetSide(room: Room, pid: string): DuetSide | null {
 }
 
 function isSoloOnTeam(room: Room, player: Player): boolean {
-  return player.team !== null &&
-    room.players.filter((p) => p.team === player.team).length === 1;
+  return player.team !== null && room.players.filter((p) => p.team === player.team).length === 1;
 }
 
 function buildRoomMeta(room: Room) {
   const avatarMap: Record<string, number> = {};
   for (const pl of room.players) avatarMap[pl.id] = pl.avatarId;
   const roster = room.players.map((pl) => ({
-    id: pl.id, name: pl.name, team: pl.team, role: pl.role, avatarId: pl.avatarId,
+    id: pl.id,
+    name: pl.name,
+    team: pl.team,
+    role: pl.role,
+    avatarId: pl.avatarId,
   }));
   return { avatarMap, roster };
 }
@@ -160,8 +186,13 @@ function broadcastState(io: Server, room: Room): void {
         playerAvatars: avatarMap,
         players: roster,
         you: {
-          id: p.id, name: p.name, team: p.team, role: p.role,
-          isHost: p.id === room.host, isSolo: false, avatarId: p.avatarId,
+          id: p.id,
+          name: p.name,
+          team: p.team,
+          role: p.role,
+          isHost: p.id === room.host,
+          isSolo: false,
+          avatarId: p.avatarId,
           duetSide: side,
         },
       });
@@ -180,8 +211,13 @@ function broadcastState(io: Server, room: Room): void {
       playerAvatars: avatarMap,
       players: roster,
       you: {
-        id: p.id, name: p.name, team: p.team, role: p.role,
-        isHost: p.id === room.host, isSolo: solo, avatarId: p.avatarId,
+        id: p.id,
+        name: p.name,
+        team: p.team,
+        role: p.role,
+        isHost: p.id === room.host,
+        isSolo: solo,
+        avatarId: p.avatarId,
       },
     });
   }
@@ -199,8 +235,12 @@ function broadcastLobby(io: Server, room: Room): void {
     playerA: room.playerA,
     playerB: room.playerB,
     players: room.players.map((p) => ({
-      id: p.id, name: p.name, team: p.team, role: p.role,
-      isHost: p.id === room.host, avatarId: p.avatarId,
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      role: p.role,
+      isHost: p.id === room.host,
+      avatarId: p.avatarId,
     })),
     hostId: room.host,
     inGame: !!room.game,
@@ -252,7 +292,10 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 function deleteSessionsForPlayer(pid: string): void {
   for (const [token, s] of sessions) {
-    if (s.playerId === pid) { sessions.delete(token); break; }
+    if (s.playerId === pid) {
+      sessions.delete(token);
+      break;
+    }
   }
 }
 
@@ -312,8 +355,11 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const pid = randomUUID();
       const token = randomUUID();
       const player: Player = {
-        id: pid, socketId: socket.id,
-        name: data.name.slice(0, 20), team: null, role: 'operative',
+        id: pid,
+        socketId: socket.id,
+        name: data.name.slice(0, 20),
+        team: null,
+        role: 'operative',
         avatarId: nextAvatarId(room),
       };
       room.players.push(player);
@@ -345,8 +391,10 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const token = randomUUID();
       const joiningMidGame = !!room.game;
       const player: Player = {
-        id: pid, socketId: socket.id,
-        name: data.name.slice(0, 20), team: null,
+        id: pid,
+        socketId: socket.id,
+        name: data.name.slice(0, 20),
+        team: null,
         role: joiningMidGame ? 'spectator' : 'operative',
         avatarId: nextAvatarId(room),
       };
@@ -424,14 +472,16 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       if (!p) return;
       const slot = data.team;
       if (slot === 'red') {
-        if (currentRoom.playerA === targetId) { currentRoom.playerA = null; }
-        else {
+        if (currentRoom.playerA === targetId) {
+          currentRoom.playerA = null;
+        } else {
           if (currentRoom.playerB === targetId) currentRoom.playerB = null;
           currentRoom.playerA = targetId;
         }
       } else if (slot === 'blue') {
-        if (currentRoom.playerB === targetId) { currentRoom.playerB = null; }
-        else {
+        if (currentRoom.playerB === targetId) {
+          currentRoom.playerB = null;
+        } else {
           if (currentRoom.playerA === targetId) currentRoom.playerA = null;
           currentRoom.playerB = targetId;
         }

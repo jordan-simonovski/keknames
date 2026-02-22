@@ -14,7 +14,9 @@
     "dev": "npm run build:server && (npm run dev:server & npm run dev:client)",
     "lint": "npm run lint --prefix client",
     "test": "npm run test --prefix client",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"server/**/*.ts\" \"client/src/**/*.{js,jsx,css}\"",
+    "format:check": "prettier --check \"server/**/*.ts\" \"client/src/**/*.{js,jsx,css}\""
   },
   "dependencies": {
     "express": "^4.21.0",
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3"
   }
 }

@@ -1,13 +1,26 @@
 import { randomInt } from 'node:crypto';
 import type {
-  BoardConfig, DuetCardType, DuetKeyCard, DuetCard,
-  DuetState, DuetSide, Clue, ErrorResult, DuetGuessResult, OkResult,
+  BoardConfig,
+  DuetCardType,
+  DuetKeyCard,
+  DuetCard,
+  DuetState,
+  DuetSide,
+  Clue,
+  ErrorResult,
+  DuetGuessResult,
+  OkResult,
   DuetLogEntry,
 } from './types';
 
 const DUET_CONFIG: BoardConfig = {
-  rows: 5, cols: 5, total: 25,
-  starting: 9, other: 9, bystanders: 13, assassins: 3,
+  rows: 5,
+  cols: 5,
+  total: 25,
+  starting: 9,
+  other: 9,
+  bystanders: 13,
+  assassins: 3,
 };
 
 const DUET_GREEN_TOTAL = 15;
@@ -112,9 +125,7 @@ function switchDuetTurn(state: DuetState): void {
   state.guessesRemaining = 0;
 }
 
-export function submitDuetClue(
-  state: DuetState, word: string, count: number,
-): ErrorResult | OkResult {
+export function submitDuetClue(state: DuetState, word: string, count: number): ErrorResult | OkResult {
   if (state.winner) return { error: 'Game is over' };
   if (state.phase !== 'spymaster') return { error: 'Not clue phase' };
   if (!word || typeof word !== 'string') return { error: 'Invalid clue word' };
@@ -140,9 +151,7 @@ export function submitDuetClue(
   return { result: 'ok' };
 }
 
-export function processDuetGuess(
-  state: DuetState, cardIndex: number,
-): ErrorResult | DuetGuessResult {
+export function processDuetGuess(state: DuetState, cardIndex: number): ErrorResult | DuetGuessResult {
   if (state.winner) return { error: 'Game is over' };
   if (state.phase !== 'operative') return { error: 'Not guessing phase' };
 
@@ -239,13 +248,18 @@ export function getDuetPlayerView(state: DuetState, side: DuetSide | null) {
     cards: state.cards.map((c) => {
       if (c.revealed) {
         return {
-          id: c.id, content: c.content, revealed: true,
-          typeA: c.typeA, typeB: c.typeB,
+          id: c.id,
+          content: c.content,
+          revealed: true,
+          typeA: c.typeA,
+          typeB: c.typeB,
           revealedType: c.revealedType,
         };
       }
       return {
-        id: c.id, content: c.content, revealed: false,
+        id: c.id,
+        content: c.content,
+        revealed: false,
         myType: side ? cardTypeForSide(c, side) : null,
         revealedType: null,
       };

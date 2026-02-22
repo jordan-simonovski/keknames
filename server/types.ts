@@ -19,7 +19,24 @@ export type GameType = 'classic' | 'duet';
 export type DuetCardType = 'green' | 'assassin' | 'neutral';
 export type DuetSide = 'A' | 'B';
 export type Difficulty = 'easy' | 'hard';
-export type CategoryId = 'observability' | 'buzzwords' | 'influencers' | 'programming' | 'startups' | 'popculture' | 'music' | 'geography' | 'currentaffairs' | 'gilmoregirls' | 'strangerthings' | 'gaming' | 'movies' | 'australia' | 'friends' | 'seinfeld' | 'custom';
+export type CategoryId =
+  | 'observability'
+  | 'buzzwords'
+  | 'influencers'
+  | 'programming'
+  | 'startups'
+  | 'popculture'
+  | 'music'
+  | 'geography'
+  | 'currentaffairs'
+  | 'gilmoregirls'
+  | 'strangerthings'
+  | 'gaming'
+  | 'movies'
+  | 'australia'
+  | 'friends'
+  | 'seinfeld'
+  | 'custom';
 
 export interface BoardConfig {
   readonly rows: number;
@@ -187,8 +204,7 @@ function stripHtml(s: string): string {
   return s.replace(/[<>"'`]/g, '');
 }
 
-const sanitizedString = (maxLen: number) =>
-  z.string().trim().transform(stripHtml).pipe(z.string().min(1).max(maxLen));
+const sanitizedString = (maxLen: number) => z.string().trim().transform(stripHtml).pipe(z.string().min(1).max(maxLen));
 
 export const CreateRoomSchema = z.object({
   name: sanitizedString(20),
@@ -210,12 +226,33 @@ export const SetModeSchema = z.object({
 });
 
 export const SetCategorySchema = z.object({
-  categoryId: z.enum(['observability', 'buzzwords', 'influencers', 'programming', 'startups', 'popculture', 'music', 'geography', 'currentaffairs', 'gilmoregirls', 'strangerthings', 'gaming', 'movies', 'australia', 'friends', 'seinfeld', 'custom']),
+  categoryId: z.enum([
+    'observability',
+    'buzzwords',
+    'influencers',
+    'programming',
+    'startups',
+    'popculture',
+    'music',
+    'geography',
+    'currentaffairs',
+    'gilmoregirls',
+    'strangerthings',
+    'gaming',
+    'movies',
+    'australia',
+    'friends',
+    'seinfeld',
+    'custom',
+  ]),
   difficulty: z.enum(['easy', 'hard']),
 });
 
 export const SetWordlistSchema = z.object({
-  words: z.array(z.string().transform(stripHtml).pipe(z.string().max(30))).max(500).nullable(),
+  words: z
+    .array(z.string().transform(stripHtml).pipe(z.string().max(30)))
+    .max(500)
+    .nullable(),
 });
 
 export const GiveClueSchema = z.object({
