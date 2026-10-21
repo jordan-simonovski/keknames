@@ -291,7 +291,9 @@ select option {
   padding: 4px 8px;
   color: var(--gold);
   opacity: 0.8;
-  transition: opacity 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
 }
 .btn-mute:hover {
   opacity: 1;
@@ -856,8 +858,13 @@ select option {
   margin-right: 4px;
 }
 @keyframes prompt-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 .vote-status {
   font-size: 0.85rem;
@@ -1667,4 +1674,101 @@ select option {
 .duet-card:focus-visible {
   outline: 3px solid #f39c12;
   outline-offset: 2px;
+}
+
+.room-access {
+  position: relative;
+  z-index: 25;
+  padding: 0.55rem 1rem;
+  background: #22252c;
+  color: #f4f0e7;
+  border-bottom: 1px solid #777;
+}
+.room-access summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.room-access-content {
+  max-width: 48rem;
+  padding: 0.75rem 0;
+}
+.room-access label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.room-access select,
+.room-access button {
+  padding: 0.5rem;
+  color: #f4f0e7;
+  background: #343944;
+  border: 1px solid #9299a6;
+  border-radius: 4px;
+}
+.room-access p {
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.access-person {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.3rem 0;
+}
+.access-person span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.room-access :focus-visible {
+  outline: 3px solid #ffd46b;
+  outline-offset: 3px;
+}
+.pause-banner {
+  padding: 0.8rem 1rem;
+  background: #ffdc86;
+  color: #241d0c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.reconnecting-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #f2c66d;
+}
+.waiting-room {
+  max-width: 40rem;
+  margin: 10vh auto;
+  padding: 2rem;
+}
+.waiting-room p {
+  margin: 1rem 0;
+}
+fieldset.game-controls {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+fieldset.game-controls:disabled {
+  opacity: 0.6;
+}
+
+/* Keep room controls and pause notices inside the viewport above the board. */
+#root {
+  display: flex;
+  flex-direction: column;
+}
+#root > .screen {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.room-access {
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.pause-banner {
+  flex-shrink: 0;
 }

@@ -71,7 +71,7 @@ function MobileChatOverlay({ isOpen, onClose, activeTab, setActiveTab, children 
 function getMajority(state: ClassicGameView): number | null {
   return voteMajority(
     state.votes,
-    state.players.filter((p) => p.team === state.currentTeam && p.role === 'operative').map((p) => p.id),
+    state.players.filter((p) => p.connected && p.team === state.currentTeam && p.role === 'operative').map((p) => p.id),
   );
 }
 
@@ -251,7 +251,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
             return (
               <button
                 type="button"
-                disabled={!clickable}
+                disabled={!clickable || !!gameState.pause}
                 key={card.id}
                 className={`duet-card ${colorClass} ${card.revealed ? 'revealed' : ''} ${clickable ? 'clickable' : ''}`}
                 onClick={clickable ? () => handleCardClick(idx) : undefined}
@@ -282,7 +282,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
         </div>
       </div>
 
-      <div className="game-controls">
+      <fieldset className="game-controls" disabled={!!gameState.pause} aria-label="Turn actions">
         {!isSpectator && amClueGiver && !isOver && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
             <span className="turn-prompt">Your turn — give a clue</span>
@@ -321,7 +321,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
             </button>
           </div>
         )}
-      </div>
+      </fieldset>
 
       <button
         className="mobile-chat-toggle"
@@ -566,7 +566,9 @@ export default function Game() {
             isSpymaster={(isSpymaster && !isSpectator) || !!classic.winner}
             voteInfo={voteInfo}
             onCardClick={
-              isMyTurn && me.role === 'operative' && classic.phase === 'operative' ? handleCardClick : undefined
+              !classic.pause && isMyTurn && me.role === 'operative' && classic.phase === 'operative'
+                ? handleCardClick
+                : undefined
             }
           />
         </div>
@@ -602,7 +604,7 @@ export default function Game() {
         </div>
       </div>
 
-      <div className="game-controls">
+      <fieldset className="game-controls" disabled={!!gameState.pause} aria-label="Turn actions">
         {!isSpectator && isSpymaster && isMyTurn && classic.phase === 'spymaster' && (
           <div className="spymaster-controls">
             <span className="turn-prompt">Your turn — give a clue</span>
@@ -676,7 +678,7 @@ export default function Game() {
             </button>
           </div>
         )}
-      </div>
+      </fieldset>
 
       <GameOver state={classic} />
 

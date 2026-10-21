@@ -1,5 +1,6 @@
-import { useRef, useEffect, useCallback } from 'react';
-import type { CardView, GameMode, BoardConfig } from '@shared/types';
+import { useRef, useEffect, useState, useId, type CSSProperties } from 'react';
+import type { CardView, GameMode, BoardConfig, CardType } from '@shared/types';
+import './Board.css';
 
 interface VoteInfo {
   votes: Record<string, string[]>;
@@ -22,498 +23,174 @@ interface BoardProps {
   onCardClick?: (index: number) => void;
 }
 
-const COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  red: { bg: '#c0392b', border: '#e74c3c', text: '#fff' },
-  blue: { bg: '#2471a3', border: '#3498db', text: '#fff' },
-  bystander: { bg: '#5d6d7e', border: '#7f8c8d', text: '#ddd' },
-  assassin: { bg: '#1a1a1a', border: '#ffffff', text: '#ff4444' },
+const TYPE_LABELS: Record<CardType, string> = {
+  red: 'Red agent',
+  blue: 'Blue agent',
+  bystander: 'Bystander',
+  assassin: 'Assassin',
+};
+const TYPE_ART: Record<CardType, string> = {
+  red: 'red_agent',
+  blue: 'blue_agent',
+  bystander: 'bystander',
+  assassin: 'assassin',
 };
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function easeOutCubic(t: number) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-const imageCache = new Map<string, HTMLImageElement | null>();
-function getImage(src: string): HTMLImageElement | null {
-  if (imageCache.has(src)) return imageCache.get(src)!;
-  const img = new Image();
-  img.src = src;
-  img.onload = () => imageCache.set(src, img);
-  img.onerror = () => imageCache.set(src, null);
-  return null;
-}
-
-function preloadImages(srcs: string[]) {
-  srcs.forEach((src) => {
-    if (!imageCache.has(src)) {
-      const img = new Image();
-      img.src = src;
-      img.onload = () => imageCache.set(src, img);
-      img.onerror = () => imageCache.set(src, null);
-    }
-  });
-}
-
-const TYPE_SRCS = [
-  'red_agent',
-  'red_agent_2',
-  'red_agent_3',
-  'red_agent_4',
-  'red_agent_5',
-  'red_agent_6',
-  'red_agent_7',
-  'red_agent_8',
-  'red_agent_9',
-  'blue_agent',
-  'blue_agent_2',
-  'blue_agent_3',
-  'blue_agent_4',
-  'blue_agent_5',
-  'blue_agent_6',
-  'blue_agent_7',
-  'blue_agent_8',
-  'blue_agent_9',
-  'bystander',
-  'bystander_2',
-  'bystander_3',
-  'bystander_4',
-  'bystander_5',
-  'bystander_6',
-  'bystander_7',
-  'bystander_8',
-  'assassin',
-  'assassin_2',
-  'assassin_3',
-].map((n) => `/assets/ui/${n}.png`);
-const AVATAR_SRCS = Array.from({ length: 8 }, (_, i) => `/assets/ui/avatar_${String(i + 1).padStart(2, '0')}.png`);
-preloadImages([...TYPE_SRCS, ...AVATAR_SRCS]);
-
-interface BoardState {
-  cards: CardView[];
-  mode: string;
-  cols: number;
-  rows: number;
-  cardW: number;
-  cardH: number;
-  gap: number;
-  hoverIndex: number;
-  revealAnimations: Map<number, { progress: number }>;
-  isSpymaster: boolean;
-  voteInfo: VoteInfo | null;
-}
+// Descriptions checked against the illustrations in public/assets/cards.
+const PICTURE_DESCRIPTIONS: Record<string, string> = {
+  card_01: 'Laughing man riding a tiny red bicycle with a flat rear tire',
+  card_02: 'Laughing surgeon holding a wrench above a patient while two nurses look shocked',
+  card_03: 'Laughing astronaut floating upside down above Earth in an orange spacesuit',
+  card_04: 'Laughing chef with his tall hat covering his eyes, cooking a burning pan of paella',
+  card_05: 'Laughing pirate with a parrot aboard a broken, sinking wooden boat',
+  card_06: 'Laughing man sitting inside a vending machine, eating a bag of chips',
+  card_07: 'Laughing conductor leading an orchestra of yellow rubber ducks',
+  card_08: 'Laughing man tangled in a purple octopus on a tropical beach',
+  card_09: 'Laughing teacher showing equations on a blackboard to cats seated at desks',
+  card_10: 'Laughing man skydiving with a knife and fork toward a giant plate of paella and chicken',
+  card_11: 'Laughing cowboy holding a beer while riding a mechanical bull in a saloon',
+  card_12: 'Laughing matador holding a red cape in front of a tiny bull',
+  card_13: 'Sleeping lifeguard in sunglasses on a tall chair while swimmers wave their arms',
+  card_14: 'Laughing magician holding a top hat with an angry cat scratching his forehead',
+  card_15: 'Laughing man wearing a seafood crown and holding a wooden spoon on a throne of pans',
+  card_16: 'Laughing man tangled in a yoga pose while an instructor and other students watch',
+  card_17: 'Laughing firefighter spraying a hose amid flames and splashing water',
+  card_18: 'Laughing DJ with headphones and sparking turntables, with records flying through the air',
+  card_19: 'Laughing painter beside a framed stick figure with paint splashes, watched by puzzled gallery visitors',
+  card_20: 'Laughing scuba diver wearing a colander on his head, surrounded by fish and a shark',
+  card_21: 'Laughing go-kart driver with a helmet perched above his head and a wheel flying off',
+  card_22: 'Laughing man in a dentist chair holding dental tools in his own mouth while a dentist watches',
+  card_23: 'Laughing man lifting a barbell while three muscular men watch in a gym',
+  card_24: 'Laughing scientist with spiky hair and a scorched lab coat in front of a colorful laboratory explosion',
+};
 
 export default function Board({ gameState, isSpymaster, voteInfo, onCardClick }: BoardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<BoardState>({
-    cards: [],
-    mode: 'words',
-    cols: 5,
-    rows: 5,
-    cardW: 0,
-    cardH: 0,
-    gap: 6,
-    hoverIndex: -1,
-    revealAnimations: new Map(),
-    isSpymaster: false,
-    voteInfo: null,
-  });
-  const prevCardsRef = useRef<CardView[] | null>(null);
-  const rafRef = useRef<number | null>(null);
-
-  const getCardRect = useCallback((index: number) => {
-    const s = stateRef.current;
-    const col = index % s.cols;
-    const row = Math.floor(index / s.cols);
-    const x = s.gap + col * (s.cardW + s.gap);
-    const y = s.gap + row * (s.cardH + s.gap);
-    return { x, y, w: s.cardW, h: s.cardH };
-  }, []);
-
-  const resize = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const s = stateRef.current;
-    const wrapper = canvas.parentElement;
-    if (!wrapper) return;
-    const maxW = wrapper.clientWidth - 16;
-    const maxH = wrapper.clientHeight - 16;
-
-    const aspect = s.mode === 'pictures' ? 1 : 0.72;
-    s.cardW = Math.floor((maxW - s.gap * (s.cols + 1)) / s.cols);
-    s.cardH = Math.floor(s.cardW * aspect);
-    if (s.cardH * s.rows + s.gap * (s.rows + 1) > maxH) {
-      s.cardH = Math.floor((maxH - s.gap * (s.rows + 1)) / s.rows);
-      s.cardW = Math.floor(s.cardH / aspect);
-    }
-
-    const totalW = s.cardW * s.cols + s.gap * (s.cols + 1);
-    const totalH = s.cardH * s.rows + s.gap * (s.rows + 1);
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = totalW * dpr;
-    canvas.height = totalH * dpr;
-    canvas.style.width = totalW + 'px';
-    canvas.style.height = totalH + 'px';
-    const ctx = canvas.getContext('2d')!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }, []);
-
-  const drawCardFront = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, card: CardView, isHover: boolean) => {
-      const s = stateRef.current;
-      ctx.fillStyle = isHover ? '#2a3a5a' : '#1e2d4d';
-      roundRect(ctx, x, y, w, h, 6);
-      ctx.fill();
-
-      if (s.isSpymaster && card.type) {
-        const colors = COLORS[card.type] || COLORS['bystander']!;
-        const isAssassin = card.type === 'assassin';
-        ctx.fillStyle = colors.bg;
-        ctx.globalAlpha = isAssassin ? 0.45 : 0.15;
-        roundRect(ctx, x, y, w, h, 6);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = colors.border;
-        ctx.lineWidth = isAssassin ? 4 : 3;
-        roundRect(ctx, x, y, w, h, 6);
-        ctx.stroke();
-        if (isAssassin) {
-          const skull = '\u2620';
-          const iconSize = Math.floor(Math.min(w, h) * 0.22);
-          ctx.font = `${iconSize}px sans-serif`;
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'top';
-          ctx.fillStyle = '#ff4444';
-          ctx.fillText(skull, x + w - 6, y + 4);
-        }
-      } else {
-        ctx.strokeStyle = '#334';
-        ctx.lineWidth = 1;
-        roundRect(ctx, x, y, w, h, 6);
-        ctx.stroke();
-      }
-
-      if (s.mode === 'pictures') {
-        const img = getImage(`/assets/cards/${card.content}.png`);
-        if (img) {
-          ctx.save();
-          roundRect(ctx, x + 3, y + 3, w - 6, h - 6, 4);
-          ctx.clip();
-          ctx.drawImage(img, x + 3, y + 3, w - 6, h - 6);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = '#556';
-          ctx.font = '11px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(card.content, x + w / 2, y + h / 2);
-        }
-      } else {
-        ctx.fillStyle = '#e0e0e0';
-        const fontSize = Math.floor(Math.min(w * 0.13, 18));
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(card.content, x + w / 2, y + h / 2, Math.max(1, w - 12));
-      }
-    },
-    [],
-  );
-
-  const drawCardBack = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, card: CardView) => {
-      const s = stateRef.current;
-      const colors = COLORS[card.type ?? 'bystander'] || COLORS['bystander']!;
-      const typeMap: Record<string, string> = {
-        red: 'red_agent',
-        blue: 'blue_agent',
-        bystander: 'bystander',
-        assassin: 'assassin',
-      };
-      const baseName = typeMap[card.type ?? 'bystander'] || 'bystander';
-      const suffix = card.typeVariant && card.typeVariant > 1 ? `_${card.typeVariant}` : '';
-      const typeImg = getImage(`/assets/ui/${baseName}${suffix}.png`);
-
-      ctx.save();
-      roundRect(ctx, x, y, w, h, 6);
-      ctx.clip();
-
-      if (typeImg) {
-        const iw = typeImg.width || w;
-        const ih = typeImg.height || h;
-        const scale = Math.max(w / iw, h / ih);
-        const dw = iw * scale;
-        const dh = ih * scale;
-        ctx.drawImage(typeImg, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
-      } else {
-        ctx.fillStyle = colors.bg;
-        ctx.fillRect(x, y, w, h);
-      }
-
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      const labelH = Math.floor(h * 0.2);
-      ctx.fillRect(x, y + h - labelH, w, labelH);
-      ctx.fillStyle = '#fff';
-      const labelFont = Math.floor(Math.min(w * 0.1, labelH * 0.6));
-      ctx.font = `bold ${labelFont}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const label = s.mode === 'pictures' ? card.content.replace('card_', '#') : card.content;
-      ctx.fillText(label, x + w / 2, y + h - labelH / 2, Math.max(1, w - 12));
-      ctx.restore();
-
-      ctx.strokeStyle = colors.border;
-      ctx.lineWidth = 3;
-      roundRect(ctx, x, y, w, h, 6);
-      ctx.stroke();
-    },
-    [],
-  );
-
-  const drawCard = useCallback(
-    (ctx: CanvasRenderingContext2D, index: number) => {
-      const s = stateRef.current;
-      const card = s.cards[index];
-      if (!card) return;
-      const { x, y, w, h } = getCardRect(index);
-      const isHover = s.hoverIndex === index && !card.revealed;
-      const anim = s.revealAnimations.get(index);
-      const p = anim ? anim.progress : card.revealed ? 1 : 0;
-
-      ctx.save();
-
-      if (anim) {
-        const ep = easeOutCubic(p);
-        const cx = x + w / 2;
-        const cy = y + h / 2;
-        if (ep < 0.5) {
-          const scaleX = 1 - ep * 2;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.scale(scaleX, 1);
-          ctx.translate(-cx, -cy);
-          drawCardFront(ctx, x, y, w, h, card, false);
-          ctx.restore();
-        } else {
-          const scaleX = (ep - 0.5) * 2;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.scale(scaleX, 1);
-          ctx.translate(-cx, -cy);
-          drawCardBack(ctx, x, y, w, h, card);
-          ctx.restore();
-        }
-      } else if (card.revealed) {
-        drawCardBack(ctx, x, y, w, h, card);
-      } else {
-        drawCardFront(ctx, x, y, w, h, card, isHover);
-      }
-
-      if (!card.revealed && !anim && s.voteInfo && s.voteInfo.showVotes && !s.voteInfo.isSolo) {
-        const voters = s.voteInfo.votes[index];
-        const isMajority = s.voteInfo.majority === index;
-
-        if (isMajority) {
-          ctx.save();
-          ctx.strokeStyle = '#f39c12';
-          ctx.lineWidth = 3;
-          ctx.shadowColor = '#f39c12';
-          ctx.shadowBlur = 8;
-          roundRect(ctx, x - 1, y - 1, w + 2, h + 2, 8);
-          ctx.stroke();
-          ctx.restore();
-        }
-        if (voters && voters.length > 0) {
-          const avatarSize = Math.max(16, Math.floor(w * 0.14));
-          const pad = 3;
-          for (let vi = 0; vi < voters.length; vi++) {
-            const isMine = voters[vi] === s.voteInfo.myId;
-            const avId = s.voteInfo.playerAvatars?.[voters[vi]!];
-            const avImg = avId ? getImage(`/assets/ui/avatar_${String(avId).padStart(2, '0')}.png`) : null;
-            const ax = x + w - (vi + 1) * (avatarSize + pad);
-            const ay = y + pad;
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(ax + avatarSize / 2, ay + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
-            ctx.clip();
-            if (avImg) {
-              ctx.drawImage(avImg, ax, ay, avatarSize, avatarSize);
-            } else {
-              ctx.fillStyle = isMine ? '#f39c12' : '#aaa';
-              ctx.fill();
-            }
-            ctx.restore();
-            ctx.beginPath();
-            ctx.arc(ax + avatarSize / 2, ay + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
-            ctx.strokeStyle = isMine ? '#f39c12' : '#fff';
-            ctx.lineWidth = isMine ? 2 : 1;
-            ctx.stroke();
-          }
-        }
-      }
-
-      ctx.restore();
-    },
-    [getCardRect, drawCardFront, drawCardBack],
-  );
-
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    const s = stateRef.current;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < s.cards.length; i++) {
-      drawCard(ctx, i);
-    }
-  }, [drawCard]);
-
-  const animateReveal = useCallback(
-    (index: number, callback?: () => void) => {
-      const s = stateRef.current;
-      const duration = 600;
-      const start = performance.now();
-      s.revealAnimations.set(index, { progress: 0 });
-
-      function tick(now: number) {
-        const progress = Math.min((now - start) / duration, 1);
-        s.revealAnimations.set(index, { progress });
-        draw();
-        if (progress < 1) {
-          rafRef.current = requestAnimationFrame(tick);
-        } else {
-          s.revealAnimations.delete(index);
-          if (callback) callback();
-        }
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    },
-    [draw],
-  );
-
-  const hitTest = useCallback(
-    (px: number, py: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return -1;
-      const s = stateRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = parseFloat(canvas.style.width) / rect.width;
-      const scaleY = parseFloat(canvas.style.height) / rect.height;
-      const mx = (px - rect.left) * scaleX;
-      const my = (py - rect.top) * scaleY;
-      for (let i = 0; i < s.cards.length; i++) {
-        const r = getCardRect(i);
-        if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return i;
-      }
-      return -1;
-    },
-    [getCardRect],
-  );
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [cardWidth, setCardWidth] = useState<number | null>(null);
+  const instructionsId = useId();
+  const {
+    cards,
+    mode,
+    config: { rows, cols },
+  } = gameState;
+  const pictures = mode === 'pictures';
+  const aspect = pictures ? 1 : 0.72;
 
   useEffect(() => {
-    if (!gameState) return;
-    const s = stateRef.current;
-    s.cards = gameState.cards;
-    s.mode = gameState.mode;
-    s.cols = gameState.config.cols;
-    s.rows = gameState.config.rows;
-    s.isSpymaster = isSpymaster;
-    s.voteInfo = voteInfo;
-
-    if (gameState.mode === 'pictures') {
-      preloadImages(gameState.cards.map((c) => `/assets/cards/${c.content}.png`));
-    }
-
-    const prev = prevCardsRef.current;
-    let revealedIdx = -1;
-    if (prev) {
-      for (let i = 0; i < gameState.cards.length; i++) {
-        if (gameState.cards[i]!.revealed && !prev[i]?.revealed) {
-          revealedIdx = i;
-          break;
-        }
-      }
-    }
-    prevCardsRef.current = gameState.cards.map((c) => ({ ...c }));
-
-    resize();
-    if (revealedIdx >= 0) {
-      animateReveal(revealedIdx, () => draw());
-    } else {
-      draw();
-    }
-  }, [gameState, isSpymaster, voteInfo, resize, draw, animateReveal]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    function handleClick(e: MouseEvent) {
-      const idx = hitTest(e.clientX, e.clientY);
-      if (idx >= 0 && onCardClick) onCardClick(idx);
-    }
-
-    function handleTouchEnd(e: TouchEvent) {
-      if (e.changedTouches.length === 0) return;
-      const t = e.changedTouches[0]!;
-      const idx = hitTest(t.clientX, t.clientY);
-      if (idx >= 0 && onCardClick) {
-        e.preventDefault();
-        onCardClick(idx);
-      }
-    }
-
-    function handleMouseMove(e: MouseEvent) {
-      const s = stateRef.current;
-      const idx = hitTest(e.clientX, e.clientY);
-      if (idx !== s.hoverIndex) {
-        s.hoverIndex = idx;
-        draw();
-      }
-      canvas!.style.cursor = onCardClick && idx >= 0 && s.cards[idx] && !s.cards[idx]!.revealed ? 'pointer' : 'default';
-    }
-
-    function handleMouseLeave() {
-      const s = stateRef.current;
-      if (s.hoverIndex !== -1) {
-        s.hoverIndex = -1;
-        draw();
-      }
-    }
-
-    canvas.addEventListener('click', handleClick);
-    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-
-    const observer = new ResizeObserver(() => {
-      resize();
-      draw();
-    });
-    observer.observe(canvas.parentElement!);
-
-    return () => {
-      canvas.removeEventListener('click', handleClick);
-      canvas.removeEventListener('touchend', handleTouchEnd);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-      observer.disconnect();
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const resize = () => {
+      const width = (viewport.clientWidth - 16 - (cols - 1) * 6) / cols;
+      const height = (viewport.clientHeight - 16 - (rows - 1) * 6) / rows;
+      // Small viewports scroll instead of shrinking text and targets indefinitely.
+      setCardWidth(Math.max(56, Math.floor(Math.min(width, height / aspect))));
     };
-  }, [onCardClick, draw, hitTest, resize]);
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [cols, rows, aspect]);
 
-  return <canvas ref={canvasRef} className="game-board" />;
+  const style = {
+    '--board-columns': cols,
+    '--board-card-width': cardWidth === null ? '1fr' : `${cardWidth}px`,
+    '--board-card-height': cardWidth === null ? '90px' : `${Math.max(80, Math.floor(cardWidth * aspect))}px`,
+    '--board-word-size': cardWidth === null ? '14px' : `${Math.max(11, Math.min(18, cardWidth * 0.13))}px`,
+  } as CSSProperties;
+
+  return (
+    <div ref={viewportRef} className="classic-board-viewport">
+      <p id={instructionsId} className="classic-board-sr-only">
+        Use Tab to move between cards. Press Enter or Space to{' '}
+        {voteInfo && !voteInfo.isSolo ? 'vote for a card' : 'guess a card'}. Cards are read in row order. Unavailable
+        cards can still be read.
+      </p>
+      <div
+        className="classic-board"
+        role="group"
+        aria-label={`${rows} by ${cols} ${pictures ? 'picture' : 'word'} board`}
+        aria-describedby={instructionsId}
+        style={style}
+      >
+        {cards.map((card, index) => {
+          const type = card.revealed || isSpymaster ? card.type : null;
+          const voting = !card.revealed && !!voteInfo?.showVotes && !voteInfo.isSolo;
+          const voters = voting ? (voteInfo.votes[index] ?? []) : [];
+          const myVote = voting && voteInfo.myVote === index;
+          const majority = voting && voteInfo.majority === index;
+          const available = !!onCardClick && !card.revealed;
+          const pictureNumber = card.content.replace(/^card_0*/, '');
+          const content = pictures
+            ? `Picture ${pictureNumber}${PICTURE_DESCRIPTIONS[card.content] ? `: ${PICTURE_DESCRIPTIONS[card.content]}` : ''}`
+            : card.content;
+          const label = [
+            content,
+            `row ${Math.floor(index / cols) + 1}, column ${(index % cols) + 1}`,
+            card.revealed ? 'revealed' : 'unrevealed',
+            type ? TYPE_LABELS[type] : null,
+            voting ? `${voters.length} ${voters.length === 1 ? 'vote' : 'votes'}` : null,
+            myVote ? 'your vote' : null,
+            majority ? 'majority reached' : null,
+          ]
+            .filter(Boolean)
+            .join(', ');
+          const art =
+            card.revealed && type
+              ? `/assets/ui/${TYPE_ART[type]}${card.typeVariant && card.typeVariant > 1 ? `_${card.typeVariant}` : ''}.png`
+              : pictures
+                ? `/assets/cards/${card.content}.png`
+                : null;
+
+          return (
+            <button
+              key={card.id}
+              type="button"
+              className={`classic-card${type ? ` classic-card--${type}` : ''}${card.revealed ? ' classic-card--revealed' : ''}${pictures ? ' classic-card--picture' : ''}${majority ? ' classic-card--majority' : ''}`}
+              aria-label={label}
+              aria-disabled={!available}
+              aria-pressed={voting ? myVote : undefined}
+              onClick={() => {
+                if (available) onCardClick(index);
+              }}
+            >
+              {art && <img className="classic-card-art" src={art} alt="" draggable={false} />}
+              <span className="classic-card-top" aria-hidden="true">
+                {type && <span className="classic-card-type">{TYPE_LABELS[type]}</span>}
+                {voters.length > 0 && (
+                  <span className="classic-card-avatars">
+                    {voters.map((id) => (
+                      <span
+                        key={id}
+                        className={`classic-card-avatar${id === voteInfo?.myId ? ' classic-card-avatar--mine' : ''}`}
+                      >
+                        {voteInfo?.playerAvatars[id] != null && (
+                          <img
+                            src={`/assets/ui/avatar_${String(voteInfo.playerAvatars[id]).padStart(2, '0')}.png`}
+                            alt=""
+                          />
+                        )}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
+              <span className="classic-card-content" aria-hidden="true">
+                {pictures ? `#${pictureNumber}` : card.content}
+              </span>
+              <span className="classic-card-status" aria-hidden="true">
+                {card.revealed
+                  ? 'Revealed'
+                  : majority
+                    ? 'Majority'
+                    : voters.length > 0
+                      ? `${voters.length} ${voters.length === 1 ? 'vote' : 'votes'}`
+                      : ''}
+                {myVote && <span>Your vote</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

@@ -28,6 +28,7 @@ function PlayerCard({ player, canControl, myId, emit }: PlayerCardProps) {
       {avSrc && <img className="player-avatar" src={avSrc} alt="" />}
       <span className="player-name">
         {player.name}
+        {!player.connected && <small className="reconnecting-label">Reconnecting…</small>}
         {player.isHost && <span className="host-badge">HOST</span>}
       </span>
       {player.team ? (
@@ -75,6 +76,7 @@ function DuetSlotCard({ player, avSrc }: DuetSlotCardProps) {
       {avSrc && <img className="player-avatar" src={avSrc} alt="" />}
       <span className="player-name">
         {player.name}
+        {!player.connected && <small className="reconnecting-label">Reconnecting…</small>}
         {player.isHost && <span className="host-badge">HOST</span>}
       </span>
     </div>
@@ -357,14 +359,23 @@ export default function Lobby() {
             {(() => {
               let reason = '';
               if (lobbyState.gameType === 'duet') {
-                if (!lobbyState.playerA || !lobbyState.playerB) reason = 'Assign both Player A and Player B';
+                if (
+                  ![lobbyState.playerA, lobbyState.playerB].every((id) =>
+                    lobbyState.players.some((p) => p.id === id && p.connected),
+                  )
+                )
+                  reason = 'Both assigned players must be connected';
               } else {
-                const hasOperatives = [reds, blues].every((team) => team.some((p) => p.role === 'operative'));
-                const hasSpymasters = [reds, blues].every(
-                  (team) => team.filter((p) => p.role === 'spymaster').length === 1,
+                const hasOperatives = [reds, blues].every((team) =>
+                  team.some((p) => p.connected && p.role === 'operative'),
                 );
-                if (!hasOperatives) reason = 'Each team needs at least one operative';
-                else if (!hasSpymasters) reason = 'Each team needs exactly one spymaster';
+                const hasSpymasters = [reds, blues].every(
+                  (team) =>
+                    team.filter((p) => p.role === 'spymaster').length === 1 &&
+                    team.filter((p) => p.role === 'spymaster').every((p) => p.connected),
+                );
+                if (!hasOperatives) reason = 'Each team needs at least one connected operative';
+                else if (!hasSpymasters) reason = 'Each team needs exactly one connected spymaster';
               }
               return (
                 <>

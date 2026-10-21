@@ -1,0 +1,192 @@
+.classic-board-viewport {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.classic-board {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(var(--board-columns), var(--board-card-width));
+  gap: 6px;
+  width: fit-content;
+  margin: auto;
+  padding: 8px;
+}
+
+.classic-board-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.classic-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0;
+  min-height: var(--board-card-height);
+  padding: 3px;
+  border: 2px solid #44516d;
+  border-radius: 6px;
+  background: #1e2d4d;
+  color: #f4f4f4;
+  font-family: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.classic-card[aria-disabled='true'] {
+  cursor: default;
+}
+
+.classic-card:hover:not([aria-disabled='true']) {
+  background: #2a3a5a;
+}
+
+.classic-card:focus-visible {
+  outline: 3px solid white;
+  outline-offset: 2px;
+  z-index: 1;
+  box-shadow: 0 0 0 5px #151526;
+}
+
+.classic-card--red {
+  border-color: #e74c3c;
+  background: #402b40;
+}
+.classic-card--blue {
+  border-color: #3498db;
+  background: #193c60;
+}
+.classic-card--bystander {
+  border-color: #a2adba;
+  background: #303c50;
+}
+.classic-card--assassin {
+  border-color: #fff;
+  background: #171c2a;
+}
+
+.classic-card--majority {
+  box-shadow: 0 0 0 2px #f39c12;
+}
+
+.classic-card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  z-index: -1;
+}
+
+.classic-card--picture:not(.classic-card--revealed) .classic-card-art {
+  object-fit: contain;
+}
+
+.classic-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2px;
+  min-height: 15px;
+}
+
+.classic-card-type,
+.classic-card-status {
+  font-size: 10px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #fff;
+  background: #151526;
+  border-radius: 2px;
+  padding: 2px;
+}
+
+.classic-card-avatars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.classic-card-avatar {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: #999;
+  overflow: hidden;
+}
+
+.classic-card-avatar--mine {
+  border: 2px solid #f39c12;
+}
+.classic-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.classic-card-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 0;
+  font-size: var(--board-word-size);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.classic-card--revealed .classic-card-content,
+.classic-card--picture .classic-card-content {
+  flex: 0;
+  margin-top: auto;
+  background: #151526e8;
+  font-size: max(11px, calc(var(--board-word-size) * 0.8));
+  padding: 2px;
+}
+
+.classic-card-status {
+  min-height: 16px;
+}
+
+.classic-card-status:empty {
+  background: transparent;
+}
+.classic-card-status span {
+  display: block;
+}
+
+/* The DOM board changes state without card-flip or hover motion. */
+@media (prefers-reduced-motion: reduce) {
+  .classic-card {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .classic-card:focus-visible {
+    outline-color: Highlight;
+  }
+  .classic-card-type,
+  .classic-card-status {
+    border: 1px solid CanvasText;
+  }
+}

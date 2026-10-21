@@ -62,21 +62,35 @@ and word labels are rendered as text, not HTML.
 - TypeScript UI code now participates in linting and the root typecheck command.
   The root test command now runs meaningful server regressions.
 
+## High-priority follow-ups implemented
+
+- Hosts can require approval for every new arrival (including spectators), lock a
+  room to returning sessions, remove players, block up to 100 sessions, and unblock
+  them. Pending applicants receive no roster, chat, or board data; requests expire
+  after two minutes and are capped at ten. Admission rechecks capacity and names.
+- Rosters show disconnected players. Losing a spymaster, the last connected
+  operative on a team, or either Duet seat pauses actions and the turn clock. Each
+  round has a shared 60-second reconnect budget that cannot be refilled by repeated
+  drops. Rejoining restores the remaining turn time. Expiry or removal of an
+  essential seat returns everyone to the lobby. Connected operatives determine
+  voting eligibility; optional-player disconnects do not interrupt the round.
+- The classic canvas is replaced with native card buttons supporting Tab, Enter,
+  and Space. Screen-reader labels include coordinates, reveal state, votes, and
+  only permitted card types. Visible type labels supplement color. Picture cards
+  have descriptions checked against every shipped illustration. Inactive cards
+  remain keyboard-readable, and the board has no flip/hover animations.
+
 ## Remaining opportunities, in priority order
 
 These are further product work, not claims of implemented features.
 
 | Priority | Opportunity | Benefit / decision |
 | --- | --- | --- |
-| High | Host approval or room locking for new arrivals, plus kick/ban controls | Codes are invitations, not verified identity. Approval is preferable for public or streamed games. Decide whether spectators should require admission too. |
-| High | Reconnecting indicators and a short pause when an essential player drops | The existing 60-second reconnect grace preserves roles, but absent players are not visibly identified and the clock keeps running. |
-| High | Accessible classic board and color-independent labels | Classic's canvas still needs a keyboard/screen-reader interaction layer and explicit team/type cues beyond color. |
 | Medium | Review-board mode after game over | The server provides the completed key, but the classic result overlay covers the board. Add a dismiss/reopen result control. |
 | Medium | Explicit confirmation for single-operative and Duet guesses | Reduces accidental taps. Multi-operative classic guesses already use vote/confirm; solo-operative classic and Duet guesses are immediate. |
 | Medium | Preserve rejected clue input with inline validation | The current input clears when submitted, so correcting a server-rejected clue requires retyping. An acknowledgement-based clue form would resolve this. |
 | Medium | Full tabletop Duet rules | Add sudden death and enforce at least one guess before voluntarily ending a turn if strict tabletop parity is desired. |
 | Medium | Mobile chat unread tracking and scroll behavior | Avoid treating older messages as unread after the rolling chat cap, and don't auto-scroll readers away from earlier messages. |
-| Low | Reduce continuous canvas redraws and image load duplication | Cache in-flight image requests, redraw when assets finish loading, and respect reduced-motion preferences. |
 | Low | Shared server/client domain types | Duplicated models can drift. Consolidate authoritative definitions while keeping wire-view types separate from secret server state. |
 
 ## Trust boundaries and deployment
@@ -84,6 +98,9 @@ These are further product work, not claims of implemented features.
 - A legitimate spymaster can communicate the key out of band. The game cannot
   prevent collusion, screenshots, or someone joining under another identity before
   a round begins. The host remains trusted to assign roles and abort rounds.
+- Session blocks apply to bearer tokens, not verified people. A fresh browser
+  identity can evade a block; approval/locked admission is the stronger control
+  for public playtests. A host cannot erase a key a legitimate spymaster already saw.
 - The session cookie remains a JavaScript-written bearer credential; HTTPS adds
   `Secure`. Moving issuance to an HTTP endpoint would allow `HttpOnly` cookies.
   This sweep found no HTML injection sink, but that is not a guarantee against
@@ -98,15 +115,17 @@ These are further product work, not claims of implemented features.
 
 ## Verification
 
-- `npm test`: server rule/handler regressions; frontend runner currently has no
-  component test files.
+- `npm test`: 41 server rule/handler regressions and seven classic-board component
+  rendering regressions, covering admission isolation and reconnect timing.
 - `npm run typecheck`, `npm run lint`, `npm run build`.
 - `GAME_URL=http://127.0.0.1:3001 npm run test:integration`: actual WebSocket
   foreign-Origin rejection, four-player setup, attempted key theft, and session
   replacement with a redacted operative payload.
 - `npm audit` and `npm audit --prefix client`: no known advisories remaining.
 - In-app browser: create a room, assign four players, verify role readiness,
-  select Pokémon, start a round, and reload into the same role/board.
+  select Pokémon, start a round, and reload into the same role/board. Follow-up
+  browser checks cover host approval/waiting screens, Tab/Enter/Space card actions,
+  revealed-card focus, and the reconnect pause banner.
 
 References: [Socket.IO origin protection](https://socket.io/docs/v4/handling-cors)
 and [official Duet rules](https://filemanager.czechgames.com/storage/files/codenames-duet/rules/codenames-duet-rules-en.pdf).

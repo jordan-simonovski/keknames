@@ -43,7 +43,10 @@ function PanelPlayer({ player, spymaster }: { player: PlayerView; spymaster: boo
   return (
     <div className={`panel-player ${spymaster ? 'is-spymaster' : ''}`}>
       {avSrc ? <img className="panel-avatar" src={avSrc} alt="" /> : <div className="panel-avatar-placeholder" />}
-      <span className="panel-player-name">{player.name}</span>
+      <span className="panel-player-name">
+        {player.name}
+        {!player.connected && <small className="reconnecting-label">Reconnecting…</small>}
+      </span>
     </div>
   );
 }
