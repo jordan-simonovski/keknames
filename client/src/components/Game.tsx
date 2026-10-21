@@ -1,6 +1,14 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { useSocket } from '../useSocket';
-import { useMuted, useMusicMuted, useBackgroundMusic, useSounds, useGameSounds, useTickSound, useTimeUpSound } from '../useSounds';
+import {
+  useMuted,
+  useMusicMuted,
+  useBackgroundMusic,
+  useSounds,
+  useGameSounds,
+  useTickSound,
+  useTimeUpSound,
+} from '../useSounds';
 import Board from './Board';
 import TeamPanel from './TeamPanel';
 import GameLog from './GameLog';
@@ -10,6 +18,7 @@ import RoundSplash from './RoundSplash';
 import RulesModal from './RulesModal';
 import type { DuetGameView, ClassicGameView, GameViewPayload } from '@shared/types';
 import { avatarUrl } from '@shared/constants';
+import { voteMajority } from '@shared/voting';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faVolumeHigh, faVolumeXmark, faMusic } from '@fortawesome/free-solid-svg-icons';
 
@@ -59,21 +68,11 @@ function MobileChatOverlay({ isOpen, onClose, activeTab, setActiveTab, children 
   );
 }
 
-function getMajority(votes: Record<string, string[]> | undefined): number | null {
-  if (!votes) return null;
-  let best: number | null = null;
-  let bestCount = 0;
-  let tied = false;
-  for (const [idx, voters] of Object.entries(votes)) {
-    if (voters.length > bestCount) {
-      best = parseInt(idx, 10);
-      bestCount = voters.length;
-      tied = false;
-    } else if (voters.length === bestCount) {
-      tied = true;
-    }
-  }
-  return tied || bestCount === 0 ? null : best;
+function getMajority(state: ClassicGameView): number | null {
+  return voteMajority(
+    state.votes,
+    state.players.filter((p) => p.connected && p.team === state.currentTeam && p.role === 'operative').map((p) => p.id),
+  );
 }
 
 function getMyVote(votes: Record<string, string[]> | undefined, myId: string): number | null {
@@ -190,7 +189,11 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute SFX' : 'Mute SFX'}>
             <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
           </button>
-          <button className={`btn btn-mute${musicMuted ? ' muted' : ''}`} onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
+          <button
+            className={`btn btn-mute${musicMuted ? ' muted' : ''}`}
+            onClick={toggleMusic}
+            title={musicMuted ? 'Unmute Music' : 'Mute Music'}
+          >
             <FontAwesomeIcon icon={faMusic} />
           </button>
           <button
@@ -205,13 +208,23 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
           <button className="rules-btn btn-leave-game" onClick={leaveRoom}>
             LEAVE
           </button>
+          {me.isHost && !isOver && (
+            <button
+              className="rules-btn"
+              onClick={() => {
+                if (window.confirm('End this game and return everyone to the lobby?')) emit('back-to-lobby');
+              }}
+            >
+              LOBBY
+            </button>
+          )}
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
           {!isSpectator && <span className="duet-side-badge">You are Player {mySide}</span>}
         </div>
         {gameState.currentClue && (
           <div className="clue-display">
             Clue: <strong>{gameState.currentClue.word}</strong> {gameState.currentClue.count}
-            <span className="guesses-left">({gameState.guessesRemaining} guesses left)</span>
+            <span className="guesses-left">(unlimited guesses)</span>
           </div>
         )}
       </div>
@@ -223,21 +236,31 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
           {gameState.cards.map((card, idx) => {
             let colorClass = 'duet-neutral';
             if (card.revealed) {
-              if (card.typeA === 'green' || card.typeB === 'green') colorClass = 'duet-green';
+              if (card.revealedType === 'green') colorClass = 'duet-green';
               else if (card.revealedType === 'assassin') colorClass = 'duet-assassin';
             } else if (!isSpectator && card.myType) {
               if (card.myType === 'green') colorClass = 'duet-mygreen';
               else if (card.myType === 'assassin') colorClass = 'duet-myassassin';
             }
-            const clickable = !card.revealed && amGuesser && gameState.phase === 'operative' && !isOver;
+            const clickable =
+              !card.revealed &&
+              !card.neutralFor.includes(clueGiver) &&
+              amGuesser &&
+              gameState.phase === 'operative' &&
+              !isOver;
             return (
-              <div
+              <button
+                type="button"
+                disabled={!clickable || !!gameState.pause}
                 key={card.id}
                 className={`duet-card ${colorClass} ${card.revealed ? 'revealed' : ''} ${clickable ? 'clickable' : ''}`}
                 onClick={clickable ? () => handleCardClick(idx) : undefined}
               >
                 <span className="duet-card-word">{card.content}</span>
-              </div>
+                {card.neutralFor.length > 0 && !card.revealed && (
+                  <small>Bystander for {card.neutralFor.map((side) => (side === 'A' ? 'B' : 'A')).join(' & ')}</small>
+                )}
+              </button>
             );
           })}
         </div>
@@ -259,7 +282,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
         </div>
       </div>
 
-      <div className="game-controls">
+      <fieldset className="game-controls" disabled={!!gameState.pause} aria-label="Turn actions">
         {!isSpectator && amClueGiver && !isOver && gameState.phase === 'spymaster' && (
           <div className="spymaster-controls">
             <span className="turn-prompt">Your turn — give a clue</span>
@@ -298,7 +321,7 @@ function DuetGame({ gameState, emit, muted, toggleMute, musicMuted, toggleMusic 
             </button>
           </div>
         )}
-      </div>
+      </fieldset>
 
       <button
         className="mobile-chat-toggle"
@@ -365,14 +388,12 @@ export default function Game() {
     const classic = gameState as ClassicGameView;
     return {
       votes: classic.votes || {},
-      majority: getMajority(classic.votes),
+      majority: getMajority(classic),
       myVote: getMyVote(classic.votes, me.id),
       myId: me.id,
       isSolo: me.isSolo,
       showVotes:
-        classic.phase === 'operative' &&
-        classic.currentTeam === me.team &&
-        (me.role === 'operative' || me.isSolo),
+        classic.phase === 'operative' && classic.currentTeam === me.team && (me.role === 'operative' || me.isSolo),
       playerAvatars: classic.playerAvatars || {},
     };
   }, [gameState, me]);
@@ -380,7 +401,7 @@ export default function Game() {
   const handleCardClick = useCallback(
     (idx: number) => {
       if (!gameState || !me) return;
-      const canAct = me.role === 'operative' || me.isSolo;
+      const canAct = me.role === 'operative';
       if (!canAct) return;
       if (gameState.mode === 'duet') return;
       const classic = gameState as ClassicGameView;
@@ -394,7 +415,7 @@ export default function Game() {
         return;
       }
 
-      const majority = getMajority(classic.votes);
+      const majority = getMajority(classic);
       const myVote = getMyVote(classic.votes, me.id);
       if (majority === idx && myVote === idx) {
         emit('make-guess', { cardIndex: idx });
@@ -433,7 +454,16 @@ export default function Game() {
   useBackgroundMusic(!!gameState && gameState.phase !== 'gameover', musicMuted);
 
   if (gameState?.mode === 'duet') {
-    return <DuetGame gameState={gameState} emit={emit} muted={muted} toggleMute={toggleMute} musicMuted={musicMuted} toggleMusic={toggleMusic} />;
+    return (
+      <DuetGame
+        gameState={gameState}
+        emit={emit}
+        muted={muted}
+        toggleMute={toggleMute}
+        musicMuted={musicMuted}
+        toggleMusic={toggleMusic}
+      />
+    );
   }
 
   if (!gameState || !me) return null;
@@ -479,7 +509,11 @@ export default function Game() {
           <button className="btn btn-mute" onClick={toggleMute} title={muted ? 'Unmute SFX' : 'Mute SFX'}>
             <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
           </button>
-          <button className={`btn btn-mute${musicMuted ? ' muted' : ''}`} onClick={toggleMusic} title={musicMuted ? 'Unmute Music' : 'Mute Music'}>
+          <button
+            className={`btn btn-mute${musicMuted ? ' muted' : ''}`}
+            onClick={toggleMusic}
+            title={musicMuted ? 'Unmute Music' : 'Mute Music'}
+          >
             <FontAwesomeIcon icon={faMusic} />
           </button>
           <button
@@ -494,6 +528,16 @@ export default function Game() {
           <button className="rules-btn btn-leave-game" onClick={leaveRoom}>
             LEAVE
           </button>
+          {me.isHost && !classic.winner && (
+            <button
+              className="rules-btn"
+              onClick={() => {
+                if (window.confirm('End this game and return everyone to the lobby?')) emit('back-to-lobby');
+              }}
+            >
+              LOBBY
+            </button>
+          )}
           {isSpectator && <span className="spectator-badge">SPECTATING</span>}
           {!isSpectator && me.team && (
             <span className={`team-badge team-badge-${me.team}`}>
@@ -504,7 +548,9 @@ export default function Game() {
         {classic.currentClue && (
           <div className="clue-display">
             Clue: <strong>{classic.currentClue.word}</strong> {classic.currentClue.count}
-            <span className="guesses-left">({classic.guessesRemaining} guesses left)</span>
+            <span className="guesses-left">
+              ({classic.currentClue.count === 0 ? 'unlimited' : classic.guessesRemaining} guesses left)
+            </span>
           </div>
         )}
       </div>
@@ -517,9 +563,13 @@ export default function Game() {
         <div className="board-wrapper">
           <Board
             gameState={classic}
-            isSpymaster={isSpymaster && !isSpectator}
+            isSpymaster={(isSpymaster && !isSpectator) || !!classic.winner}
             voteInfo={voteInfo}
-            onCardClick={isSpectator ? undefined : handleCardClick}
+            onCardClick={
+              !classic.pause && isMyTurn && me.role === 'operative' && classic.phase === 'operative'
+                ? handleCardClick
+                : undefined
+            }
           />
         </div>
 
@@ -531,13 +581,7 @@ export default function Game() {
                 <div className="panel-section-title">Spectators</div>
                 {spectators.map((p) => (
                   <div key={p.id} className="panel-player">
-                    {p.avatarId != null && (
-                      <img
-                        className="panel-avatar"
-                        src={avatarUrl(p.avatarId)}
-                        alt=""
-                      />
-                    )}
+                    {p.avatarId != null && <img className="panel-avatar" src={avatarUrl(p.avatarId)} alt="" />}
                     <span className="panel-player-name">{p.name}</span>
                   </div>
                 ))}
@@ -560,7 +604,7 @@ export default function Game() {
         </div>
       </div>
 
-      <div className="game-controls">
+      <fieldset className="game-controls" disabled={!!gameState.pause} aria-label="Turn actions">
         {!isSpectator && isSpymaster && isMyTurn && classic.phase === 'spymaster' && (
           <div className="spymaster-controls">
             <span className="turn-prompt">Your turn — give a clue</span>
@@ -597,22 +641,20 @@ export default function Game() {
               <span className="turn-prompt">Your turn — pick a card</span>
             ) : (
               (() => {
-                const majority = getMajority(classic.votes);
+                const majority = getMajority(classic);
                 const myVote = getMyVote(classic.votes, me.id);
-                const totalVoters = Object.values(classic.votes || {}).reduce(
-                  (s, v) => { v.forEach((id) => { if (!s.has(id)) s.add(id); }); return s; },
-                  new Set<string>(),
-                ).size;
+                const totalVoters = Object.values(classic.votes || {}).reduce((s, v) => {
+                  v.forEach((id) => {
+                    if (!s.has(id)) s.add(id);
+                  });
+                  return s;
+                }, new Set<string>()).size;
                 const majorityWord = majority !== null ? classic.cards[majority]?.content : null;
                 return (
                   <>
-                    {majority === null && myVote === null && (
-                      <span className="turn-prompt">Click a card to vote</span>
-                    )}
+                    {majority === null && myVote === null && <span className="turn-prompt">Click a card to vote</span>}
                     {majority === null && myVote !== null && (
-                      <span className="vote-status">
-                        Voted — waiting for others ({totalVoters} voted)
-                      </span>
+                      <span className="vote-status">Voted — waiting for others ({totalVoters} voted)</span>
                     )}
                     {majority !== null && myVote !== majority && (
                       <span className="vote-status vote-majority">
@@ -636,7 +678,7 @@ export default function Game() {
             </button>
           </div>
         )}
-      </div>
+      </fieldset>
 
       <GameOver state={classic} />
 

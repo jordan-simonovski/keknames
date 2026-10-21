@@ -13,6 +13,8 @@ import type {
   Role,
 } from './types';
 import { CARD_TYPES } from './types';
+import { voteMajority } from '../shared/voting';
+import { appendGameLog } from './log';
 
 const PICTURES_CONFIG: BoardConfig = {
   rows: 4,
@@ -122,21 +124,8 @@ export function castVote(game: GameState, cardIndex: number, playerId: string): 
   return { result: 'ok' };
 }
 
-export function getVoteMajority(game: GameState): number | null {
-  let best: number | null = null;
-  let bestCount = 0;
-  let tied = false;
-  for (const [idx, voters] of Object.entries(game.votes)) {
-    if (voters.length > bestCount) {
-      best = parseInt(idx, 10);
-      bestCount = voters.length;
-      tied = false;
-    } else if (voters.length === bestCount) {
-      tied = true;
-    }
-  }
-  if (tied || bestCount === 0) return null;
-  return best;
+export function getVoteMajority(game: GameState, eligibleIds: readonly string[]): number | null {
+  return voteMajority(game.votes, eligibleIds);
 }
 
 export function clearVotes(game: GameState): void {
@@ -170,7 +159,7 @@ export function processGuess(game: GameState, cardIndex: number, team: Team): Er
   if (card.type === 'red') game.redRemaining--;
   if (card.type === 'blue') game.blueRemaining--;
 
-  game.log.push({ team, cardIndex, cardType: card.type });
+  appendGameLog(game.log, { team, cardIndex, cardType: card.type });
 
   if (card.type === CARD_TYPES.ASSASSIN) {
     game.winner = team === 'red' ? 'blue' : 'red';
@@ -214,9 +203,11 @@ export function submitClue(game: GameState, team: Team, word: string, count: num
 
   const clueWord = word.trim().toUpperCase();
   if (clueWord.length === 0) return { error: 'Empty clue' };
+  if (/\s/u.test(clueWord)) return { error: 'Clue must be one word' };
 
   if (game.mode !== 'pictures') {
     for (const card of game.cards) {
+      if (card.revealed) continue;
       const cw = card.content.toUpperCase();
       if (clueWord.includes(cw) || cw.includes(clueWord)) {
         return { error: `Clue must not contain or match board word "${cw}"` };
@@ -225,10 +216,10 @@ export function submitClue(game: GameState, team: Team, word: string, count: num
   }
 
   game.currentClue = { word: clueWord, count };
-  game.guessesRemaining = count + 1;
+  game.guessesRemaining = count === 0 ? game.cards.length : count + 1;
   game.phase = 'operative';
   clearVotes(game);
-  game.log.push({ team, clue: clueWord, count });
+  appendGameLog(game.log, { team, clue: clueWord, count });
 
   return { result: 'ok' };
 }
@@ -249,7 +240,7 @@ export function getPlayerView(game: GameState, role: Role) {
       id: c.id,
       content: c.content,
       revealed: c.revealed,
-      type: role === 'spymaster' || c.revealed ? c.type : null,
+      type: role === 'spymaster' || c.revealed || game.winner ? c.type : null,
       typeVariant: c.revealed ? c.typeVariant : null,
     })),
     startingTeam: game.startingTeam,

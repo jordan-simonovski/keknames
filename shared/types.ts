@@ -9,6 +9,11 @@ export const CARD_TYPES = {
 
 export type CardType = (typeof CARD_TYPES)[keyof typeof CARD_TYPES];
 export type Team = 'red' | 'blue';
+export type AccessMode = 'open' | 'approval' | 'locked';
+export interface PauseView {
+  until: number;
+  missingPlayerIds: string[];
+}
 export type Role = 'spymaster' | 'operative' | 'spectator';
 export type TurnTimeout = 0 | 60 | 120 | 180 | 300;
 export type Phase = 'spymaster' | 'operative' | 'gameover';
@@ -123,6 +128,7 @@ export interface DuetCard {
   readonly typeB: DuetCardType;
   revealed: boolean;
   revealedType: DuetCardType | null;
+  neutralFor: DuetSide[];
 }
 
 export interface DuetState {
@@ -147,6 +153,7 @@ export interface DuetState {
 export interface Player {
   readonly id: string;
   socketId: string;
+  connected: boolean;
   name: string;
   team: Team | null;
   role: Role;
@@ -164,6 +171,10 @@ export interface ChatMessage {
 export interface Room {
   readonly code: string;
   host: string | null;
+  accessMode: AccessMode;
+  blockedSessions: Map<string, { id: string; name: string }>;
+  pause: { startedAt: number; expiresAt: number; remainingTurnMs: number | null } | null;
+  pauseRemainingMs: number;
   players: Player[];
   gameType: GameType;
   mode: GameMode;
@@ -195,9 +206,11 @@ export interface DuetCardView {
   readonly typeB?: DuetCardType;
   readonly myType?: DuetCardType | null;
   readonly revealedType: DuetCardType | null;
+  readonly neutralFor: readonly DuetSide[];
 }
 
 export interface PlayerView {
+  readonly connected: boolean;
   readonly id: string;
   readonly name: string;
   readonly team: Team | null;
@@ -233,6 +246,7 @@ export interface ClassicGameView {
   readonly votes: Record<string, string[]>;
   readonly turnDeadline: number | null;
   readonly roomCode: string;
+  readonly pause: PauseView | null;
   readonly chatLog: ChatMessage[];
   readonly playerAvatars: Record<string, number>;
   readonly players: PlayerView[];
@@ -254,6 +268,7 @@ export interface DuetGameView {
   readonly log: DuetLogEntry[];
   readonly turnDeadline: number | null;
   readonly roomCode: string;
+  readonly pause: PauseView | null;
   readonly chatLog: ChatMessage[];
   readonly playerAvatars: Record<string, number>;
   readonly players: PlayerView[];
@@ -267,7 +282,15 @@ export interface CategoryInfo {
   readonly label: string;
 }
 
+export interface RoomControls {
+  code: string;
+  accessMode: AccessMode;
+  requests: { id: string; name: string }[];
+  blockedPlayers: { id: string; name: string }[];
+}
+
 export interface LobbyState {
+  readonly accessMode: AccessMode;
   readonly code: string;
   readonly gameType: GameType;
   readonly mode: GameMode;

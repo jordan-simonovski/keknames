@@ -1,7 +1,17 @@
 import { useRef, useCallback, useEffect, useState, type MutableRefObject } from 'react';
 import type { GameViewPayload } from '@shared/types';
 
-type SoundName = 'round' | 'clue' | 'correct' | 'wrong' | 'tick' | 'timeUp' | 'win' | 'lose' | 'redAnnounce' | 'blueAnnounce';
+type SoundName =
+  | 'round'
+  | 'clue'
+  | 'correct'
+  | 'wrong'
+  | 'tick'
+  | 'timeUp'
+  | 'win'
+  | 'lose'
+  | 'redAnnounce'
+  | 'blueAnnounce';
 
 const SOUND_FILES: Record<SoundName, string> = {
   round: '/assets/sounds/round.mp3',
@@ -117,14 +127,11 @@ export function useGameSounds(
   prevRef: MutableRefObject<GameViewPayload | null>,
   play: (name: SoundName) => void,
 ) {
-  const soundedLogLen = useRef(0);
-
   useEffect(() => {
     if (!gameState) return;
     const prev = prevRef.current;
     prevRef.current = gameState;
-    if (!prev) {
-      soundedLogLen.current = gameState.log?.length ?? 0;
+    if (!prev || (prev.winner && !gameState.winner)) {
       if ('currentTeam' in gameState) {
         play(gameState.currentTeam === 'red' ? 'redAnnounce' : 'blueAnnounce');
       } else {
@@ -150,10 +157,8 @@ export function useGameSounds(
       return;
     }
 
-    const logLen = gameState.log?.length ?? 0;
-    if (logLen > soundedLogLen.current) {
-      soundedLogLen.current = logLen;
-      const lastLog = gameState.log[logLen - 1];
+    const lastLog = gameState.log.at(-1);
+    if (JSON.stringify(lastLog) !== JSON.stringify(prev.log.at(-1))) {
       if (lastLog && 'cardType' in lastLog) {
         if (gameState.mode === 'duet') {
           play(lastLog.cardType === 'green' ? 'correct' : 'wrong');

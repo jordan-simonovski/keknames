@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { appendGameLog } from './log';
 import type {
   BoardConfig,
   DuetCardType,
@@ -78,6 +79,7 @@ export function createDuetGame(wordPool: string[]): DuetState {
     typeB: keyCard.sideB[i]!,
     revealed: false,
     revealedType: null,
+    neutralFor: [],
   }));
 
   return {
@@ -113,13 +115,16 @@ function cardTypeForSide(card: DuetCard, side: DuetSide): DuetCardType {
 function countAllGreens(cards: DuetCard[]): number {
   let count = 0;
   for (const c of cards) {
-    if (c.revealed && (c.typeA === 'green' || c.typeB === 'green')) count++;
+    if (c.revealedType === 'green') count++;
   }
   return count;
 }
 
 function switchDuetTurn(state: DuetState): void {
-  state.currentTurn = state.currentTurn === 'A' ? 'B' : 'A';
+  const next = state.currentTurn === 'A' ? 'B' : 'A';
+  if (state.cards.some((c) => !c.revealed && cardTypeForSide(c, next) === 'green')) {
+    state.currentTurn = next;
+  }
   state.phase = 'spymaster';
   state.currentClue = null;
   state.guessesRemaining = 0;
@@ -135,8 +140,10 @@ export function submitDuetClue(state: DuetState, word: string, count: number): E
 
   const clueWord = word.trim().toUpperCase();
   if (clueWord.length === 0) return { error: 'Empty clue' };
+  if (/\s/u.test(clueWord)) return { error: 'Clue must be one word' };
 
   for (const card of state.cards) {
+    if (card.revealed) continue;
     const cw = card.content.toUpperCase();
     if (clueWord.includes(cw) || cw.includes(clueWord)) {
       return { error: `Clue must not contain or match board word "${cw}"` };
@@ -144,9 +151,10 @@ export function submitDuetClue(state: DuetState, word: string, count: number): E
   }
 
   state.currentClue = { word: clueWord, count };
-  state.guessesRemaining = count === 0 ? 99 : count + 1;
+  // Duet allows guesses from earlier clues, without the classic count + 1 limit.
+  state.guessesRemaining = state.cards.filter((c) => !c.revealed).length;
   state.phase = 'operative';
-  state.log.push({ side: state.currentTurn, clue: clueWord, count });
+  appendGameLog(state.log, { side: state.currentTurn, clue: clueWord, count });
 
   return { result: 'ok' };
 }
@@ -158,13 +166,18 @@ export function processDuetGuess(state: DuetState, cardIndex: number): ErrorResu
   const card = state.cards[cardIndex];
   if (!card) return { error: 'Invalid card' };
   if (card.revealed) return { error: 'Already revealed' };
+  if (card.neutralFor.includes(state.currentTurn)) return { error: 'Already a bystander for this clue giver' };
 
   const side = guesserSide(state);
-  const type = cardTypeForSide(card, side);
+  const type = cardTypeForSide(card, state.currentTurn);
 
-  card.revealed = true;
-  card.revealedType = type;
-  state.log.push({ side, cardIndex, cardType: type });
+  if (type === 'neutral') {
+    card.neutralFor.push(state.currentTurn);
+  } else {
+    card.revealed = true;
+    card.revealedType = type;
+  }
+  appendGameLog(state.log, { side, cardIndex, cardType: type });
 
   if (type === 'assassin') {
     state.winner = 'lose';
@@ -193,16 +206,6 @@ export function processDuetGuess(state: DuetState, cardIndex: number): ErrorResu
 
   // Green -- keep guessing
   state.guessesRemaining--;
-  if (state.guessesRemaining <= 0) {
-    state.turnsRemaining--;
-    if (state.turnsRemaining <= 0) {
-      state.winner = 'lose';
-      state.phase = 'gameover';
-      return { result: 'tokens_exhausted', winner: 'lose' };
-    }
-    switchDuetTurn(state);
-    return { result: 'correct' };
-  }
 
   return { result: 'correct' };
 }
@@ -245,25 +248,15 @@ export function getDuetPlayerView(state: DuetState, side: DuetSide | null) {
   return {
     mode: state.mode,
     config: state.config,
-    cards: state.cards.map((c) => {
-      if (c.revealed) {
-        return {
-          id: c.id,
-          content: c.content,
-          revealed: true,
-          typeA: c.typeA,
-          typeB: c.typeB,
-          revealedType: c.revealedType,
-        };
-      }
-      return {
-        id: c.id,
-        content: c.content,
-        revealed: false,
-        myType: side ? cardTypeForSide(c, side) : null,
-        revealedType: null,
-      };
-    }),
+    cards: state.cards.map((c) => ({
+      id: c.id,
+      content: c.content,
+      revealed: c.revealed,
+      myType: side ? cardTypeForSide(c, side) : null,
+      revealedType: c.revealedType,
+      neutralFor: c.neutralFor,
+      ...(state.winner ? { typeA: c.typeA, typeB: c.typeB } : {}),
+    })),
     currentTurn: state.currentTurn,
     phase: state.phase,
     currentClue: state.currentClue,

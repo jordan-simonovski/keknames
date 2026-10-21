@@ -11,6 +11,11 @@ export const CARD_TYPES = {
 
 export type CardType = (typeof CARD_TYPES)[keyof typeof CARD_TYPES];
 export type Team = 'red' | 'blue';
+export type AccessMode = 'open' | 'approval' | 'locked';
+export interface PauseView {
+  until: number;
+  missingPlayerIds: string[];
+}
 export type Role = 'spymaster' | 'operative' | 'spectator';
 export type TurnTimeout = 0 | 60 | 120 | 180 | 300;
 export type Phase = 'spymaster' | 'operative' | 'gameover';
@@ -125,6 +130,7 @@ export interface DuetCard {
   readonly typeB: DuetCardType;
   revealed: boolean;
   revealedType: DuetCardType | null;
+  neutralFor: DuetSide[];
 }
 
 export interface DuetState {
@@ -149,6 +155,7 @@ export interface DuetState {
 export interface Player {
   readonly id: string;
   socketId: string;
+  connected: boolean;
   name: string;
   team: Team | null;
   role: Role;
@@ -166,6 +173,10 @@ export interface ChatMessage {
 export interface Room {
   readonly code: string;
   host: string | null;
+  accessMode: AccessMode;
+  blockedSessions: Map<string, { id: string; name: string }>;
+  pause: { startedAt: number; expiresAt: number; remainingTurnMs: number | null } | null;
+  pauseRemainingMs: number;
   players: Player[];
   gameType: GameType;
   mode: GameMode;
@@ -232,6 +243,7 @@ export const SetModeSchema = z.object({
 
 export const SetCategorySchema = z.object({
   categoryId: z.enum([
+    'standard',
     'observability',
     'buzzwords',
     'influencers',
@@ -248,6 +260,10 @@ export const SetCategorySchema = z.object({
     'australia',
     'friends',
     'seinfeld',
+    'dnd',
+    'nineties',
+    'fastfood',
+    'pokemon',
     'custom',
   ]),
   difficulty: z.enum(['easy', 'hard']),
@@ -280,3 +296,8 @@ export const SetTimeoutSchema = z.object({
 export const SendChatSchema = z.object({
   text: sanitizedString(200),
 });
+
+export const SetAccessSchema = z.object({ mode: z.enum(['open', 'approval', 'locked']) });
+export const ReviewJoinSchema = z.object({ requestId: z.string().uuid(), approve: z.boolean() });
+export const RemovePlayerSchema = z.object({ targetId: z.string().uuid(), ban: z.boolean() });
+export const UnblockPlayerSchema = z.object({ targetId: z.string().uuid() });

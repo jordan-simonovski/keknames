@@ -2,6 +2,14 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import type { z } from 'zod';
 import {
+  broadcastRoomControls,
+  requestAdmission,
+  resolveAdmission,
+  cancelSocketAdmission,
+  cancelRoomAdmissions,
+} from './admission';
+import { windowLimiter } from './rate-limit';
+import {
   createGame,
   processGuess,
   submitClue,
@@ -25,6 +33,10 @@ import {
 import { validateWordList, getWordsForGame, CATEGORY_LIST, DEFAULT_CATEGORY, DEFAULT_DIFFICULTY } from './wordlists';
 import type { Room, Player, ChatMessage, Team, DuetState, GameState, DuetSide } from './types';
 import {
+  SetAccessSchema,
+  ReviewJoinSchema,
+  RemovePlayerSchema,
+  UnblockPlayerSchema,
   CreateRoomSchema,
   JoinRoomSchema,
   AssignTeamSchema,
@@ -39,6 +51,7 @@ import {
 } from './types';
 
 const rooms = new Map<string, Room>();
+const allowAdmission = windowLimiter(120, 60_000);
 
 const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
 const roomLastActivity = new Map<string, number>();
@@ -52,8 +65,10 @@ const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DISCONNECT_GRACE_MS = 60_000;
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const ROOM_CODE_LEN = 4;
+const ROOM_CODE_LEN = 6;
+const MAX_ROOMS = 1000;
 const MAX_PLAYERS = 10;
+const MAX_BLOCKED_SESSIONS = 100;
 const MAX_CHAT_LOG = 200;
 const MAX_AVATAR_ID = 8;
 const ROOM_IDLE_TTL_MS = 30 * 60 * 1000;
@@ -86,6 +101,7 @@ function touchRoom(room: Room): void {
 
 function destroyRoom(room: Room, io: Server): void {
   clearRoomTimer(room);
+  cancelRoomAdmissions(io, room);
   roomLastActivity.delete(room.code);
   for (const p of room.players) {
     cancelDisconnectTimer(p.id);
@@ -123,6 +139,10 @@ function createRoom(): Room {
   const room: Room = {
     code,
     host: null,
+    accessMode: 'open',
+    blockedSessions: new Map(),
+    pause: null,
+    pauseRemainingMs: DISCONNECT_GRACE_MS,
     players: [],
     gameType: 'classic',
     mode: 'words',
@@ -136,6 +156,7 @@ function createRoom(): Room {
     chatLog: [],
   };
   rooms.set(code, room);
+  touchRoom(room);
   return room;
 }
 
@@ -154,7 +175,30 @@ function getDuetSide(room: Room, pid: string): DuetSide | null {
 }
 
 function isSoloOnTeam(room: Room, player: Player): boolean {
-  return player.team !== null && room.players.filter((p) => p.team === player.team).length === 1;
+  return (
+    player.role === 'operative' &&
+    player.team !== null &&
+    room.players.filter((p) => p.connected && p.team === player.team && p.role === 'operative').length === 1
+  );
+}
+
+function classicReady(room: Room): boolean {
+  return (['red', 'blue'] as const).every((team) => {
+    const players = room.players.filter((p) => p.team === team);
+    return (
+      players.filter((p) => p.role === 'spymaster').length === 1 &&
+      players.some((p) => p.connected && p.role === 'operative') &&
+      players.filter((p) => p.role === 'spymaster').every((p) => p.connected)
+    );
+  });
+}
+
+function removeVotes(room: Room, pid: string): void {
+  if (!room.game || !isClassicGame(room.game)) return;
+  for (const [index, voters] of Object.entries(room.game.votes)) {
+    room.game.votes[index] = voters.filter((id) => id !== pid);
+    if (!room.game.votes[index]!.length) delete room.game.votes[index];
+  }
 }
 
 function buildRoomMeta(room: Room) {
@@ -166,6 +210,7 @@ function buildRoomMeta(room: Room) {
     team: pl.team,
     role: pl.role,
     avatarId: pl.avatarId,
+    connected: pl.connected,
   }));
   return { avatarMap, roster };
 }
@@ -182,6 +227,7 @@ function broadcastState(io: Server, room: Room): void {
       io.to(p.socketId).emit('game-state', {
         ...view,
         roomCode: room.code,
+        pause: pauseView(room),
         chatLog: room.chatLog,
         playerAvatars: avatarMap,
         players: roster,
@@ -206,7 +252,9 @@ function broadcastState(io: Server, room: Room): void {
     const view = getPlayerView(classic, p.role);
     io.to(p.socketId).emit('game-state', {
       ...view,
+      votes: p.team === classic.currentTeam ? view.votes : {},
       roomCode: room.code,
+      pause: pauseView(room),
       chatLog: room.chatLog,
       playerAvatars: avatarMap,
       players: roster,
@@ -226,6 +274,7 @@ function broadcastState(io: Server, room: Room): void {
 function broadcastLobby(io: Server, room: Room): void {
   const data = {
     code: room.code,
+    accessMode: room.accessMode,
     gameType: room.gameType,
     mode: room.mode,
     categoryId: room.categoryId,
@@ -241,11 +290,13 @@ function broadcastLobby(io: Server, room: Room): void {
       role: p.role,
       isHost: p.id === room.host,
       avatarId: p.avatarId,
+      connected: p.connected,
     })),
     hostId: room.host,
     inGame: !!room.game,
   };
   io.to(room.code).emit('lobby-state', data);
+  broadcastRoomControls(io, room);
 }
 
 function clearRoomTimer(room: Room): void {
@@ -258,21 +309,108 @@ function clearRoomTimer(room: Room): void {
 
 function startRoomTimer(io: Server, room: Room): void {
   clearRoomTimer(room);
-  if (room.turnTimeout === 0) return;
+  room.pause = null;
+  room.pauseRemainingMs = DISCONNECT_GRACE_MS;
   const interval = setInterval(() => {
-    const game = room.game;
-    if (!game || game.winner || game.turnDeadline === null) return;
-    if (Date.now() < game.turnDeadline) return;
-    if (isDuetGame(game)) {
-      skipDuetTurn(game);
-      if (!game.winner) setDuetDeadline(game, room.turnTimeout * 1000);
-    } else {
-      switchTurn(game);
-      setDeadline(game, room.turnTimeout * 1000);
-    }
-    broadcastState(io, room);
+    expireTurn(io, room);
   }, 1_000);
   roomTimers.set(room.code, interval);
+}
+
+function expireTurn(io: Server, room: Room): boolean {
+  if (room.pause) {
+    if (Date.now() >= room.pause.expiresAt) {
+      returnToLobby(io, room, 'Reconnect time expired. Reassign players in the lobby to continue.');
+      return true;
+    }
+    return false;
+  }
+  const game = room.game;
+  if (!game || game.winner || game.turnDeadline === null || Date.now() < game.turnDeadline) return false;
+  if (isDuetGame(game)) {
+    skipDuetTurn(game);
+    setDuetDeadline(game, game.winner ? 0 : room.turnTimeout * 1000);
+  } else {
+    switchTurn(game);
+    setDeadline(game, room.turnTimeout * 1000);
+  }
+  broadcastState(io, room);
+  return true;
+}
+
+function missingEssentialPlayers(room: Room): Player[] {
+  if (room.gameType === 'duet')
+    return room.players.filter((p) => !p.connected && (p.id === room.playerA || p.id === room.playerB));
+  return room.players.filter(
+    (p) =>
+      !p.connected &&
+      p.team &&
+      (p.role === 'spymaster' ||
+        (p.role === 'operative' &&
+          !room.players.some((other) => other.connected && other.team === p.team && other.role === 'operative'))),
+  );
+}
+
+function pauseView(room: Room) {
+  return room.pause
+    ? { until: room.pause.expiresAt, missingPlayerIds: missingEssentialPlayers(room).map((p) => p.id) }
+    : null;
+}
+
+function returnToLobby(io: Server, room: Room, reason?: string): void {
+  clearRoomTimer(room);
+  room.pause = null;
+  room.game = null;
+  if (reason) io.to(room.code).emit('error-msg', reason);
+  broadcastLobby(io, room);
+}
+
+function updatePause(io: Server, room: Room): void {
+  if (!room.game || room.game.winner) return;
+  const seatsPresent =
+    room.gameType === 'duet'
+      ? !!room.playerA && !!room.playerB
+      : (['red', 'blue'] as const).every((team) =>
+          ['spymaster', 'operative'].every((role) => room.players.some((p) => p.team === team && p.role === role)),
+        );
+  if (!seatsPresent)
+    return returnToLobby(io, room, 'An essential player left. Reassign players in the lobby to continue.');
+  if (room.pause && Date.now() >= room.pause.expiresAt) {
+    return returnToLobby(io, room, 'Reconnect time expired. Reassign players in the lobby to continue.');
+  }
+  if (missingEssentialPlayers(room).length) {
+    if (!room.pause) {
+      if (room.pauseRemainingMs <= 0)
+        return returnToLobby(io, room, 'Reconnect time expired. Reassign players in the lobby to continue.');
+      const now = Date.now();
+      room.pause = {
+        startedAt: now,
+        expiresAt: now + room.pauseRemainingMs,
+        remainingTurnMs: room.game.turnDeadline === null ? null : Math.max(0, room.game.turnDeadline - now),
+      };
+      room.game.turnDeadline = null;
+    }
+  } else if (room.pause) {
+    room.pauseRemainingMs = Math.max(0, room.pauseRemainingMs - (Date.now() - room.pause.startedAt));
+    room.game.turnDeadline = room.pause.remainingTurnMs === null ? null : Date.now() + room.pause.remainingTurnMs;
+    room.pause = null;
+  }
+}
+
+function removePlayer(io: Server, room: Room, pid: string): void {
+  cancelDisconnectTimer(pid);
+  deleteSessionsForPlayer(pid);
+  const player = room.players.find((p) => p.id === pid);
+  if (player) io.sockets.sockets.get(player.socketId)?.leave(room.code);
+  room.players = room.players.filter((p) => p.id !== pid);
+  removeVotes(room, pid);
+  if (room.playerA === pid) room.playerA = null;
+  if (room.playerB === pid) room.playerB = null;
+  if (!room.players.length) return destroyRoom(room, io);
+  if (room.host === pid) room.host = (room.players.find((p) => p.connected) ?? room.players[0])!.id;
+  updatePause(io, room);
+  broadcastLobby(io, room);
+  if (room.game) broadcastState(io, room);
 }
 
 function safeParse<T>(schema: z.ZodType<T>, data: unknown): T | null {
@@ -310,8 +448,26 @@ function cancelDisconnectTimer(pid: string): void {
 export function setupRoomHandlers(io: Server, socket: Socket): void {
   let currentRoom: Room | null = null;
   let playerId: string | null = null;
+  let pending = false;
+  let currentToken = parseCookies(socket.handshake.headers.cookie)['keknames_session'];
+
+  function ownsSession(): boolean {
+    return (
+      !!currentRoom &&
+      rooms.get(currentRoom.code) === currentRoom &&
+      currentRoom.players.some((p) => p.id === playerId && p.socketId === socket.id && p.connected)
+    );
+  }
 
   function guarded(handler: () => void): void {
+    if (
+      currentRoom &&
+      (rooms.get(currentRoom.code) !== currentRoom || !currentRoom.players.some((p) => p.id === playerId))
+    ) {
+      currentRoom = null;
+      playerId = null;
+    }
+    if (currentRoom && !ownsSession()) return;
     if (!checkRateLimit(socket)) {
       socket.emit('error-msg', 'Rate limit exceeded');
       return;
@@ -330,11 +486,19 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const player = room?.players.find((p) => p.id === session.playerId);
       if (room && player) {
         cancelDisconnectTimer(player.id);
+        const previousSocket = io.sockets.sockets.get(player.socketId);
         player.socketId = socket.id;
+        player.connected = true;
+        if (previousSocket && previousSocket.id !== socket.id) {
+          previousSocket.emit('session-replaced');
+          previousSocket.leave(room.code);
+          previousSocket.disconnect(true);
+        }
         currentRoom = room;
         playerId = player.id;
         socket.join(room.code);
         touchRoom(room);
+        updatePause(io, room);
         socket.emit('rejoined', { code: room.code, playerId: player.id, inGame: !!room.game });
         broadcastLobby(io, room);
         if (room.game) broadcastState(io, room);
@@ -342,21 +506,27 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         sessions.delete(incomingToken);
         socket.emit('session-expired');
       }
+    } else if (![...rooms.values()].some((room) => room.blockedSessions.has(incomingToken))) {
+      socket.emit('session-expired');
     }
   }
 
   socket.on('create-room', (raw: unknown, cb: unknown) => {
     if (typeof cb !== 'function') return;
     guarded(() => {
-      if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
+      if (currentRoom || pending) return (cb as Function)({ error: 'Already in a room or awaiting approval' });
+      if (!allowAdmission(socket.handshake.address))
+        return (cb as Function)({ error: 'Too many room requests. Try again in a minute.' });
       const data = safeParse(CreateRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
+      if (rooms.size >= MAX_ROOMS) return (cb as Function)({ error: 'Server full. Please try again later.' });
       const room = createRoom();
       const pid = randomUUID();
       const token = randomUUID();
       const player: Player = {
         id: pid,
         socketId: socket.id,
+        connected: true,
         name: data.name.slice(0, 20),
         team: null,
         role: 'operative',
@@ -366,6 +536,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       room.host = player.id;
       currentRoom = room;
       playerId = player.id;
+      currentToken = token;
       sessions.set(token, { playerId: pid, roomCode: room.code });
       socket.join(room.code);
       (cb as Function)({ code: room.code, sessionToken: token, playerId: pid });
@@ -376,47 +547,133 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('join-room', (raw: unknown, cb: unknown) => {
     if (typeof cb !== 'function') return;
     guarded(() => {
-      if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
+      if (currentRoom || pending) return (cb as Function)({ error: 'Already in a room or awaiting approval' });
+      if (!allowAdmission(socket.handshake.address))
+        return (cb as Function)({ error: 'Too many room requests. Try again in a minute.' });
       const data = safeParse(JoinRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
       const roomCode = data.code.toUpperCase();
       const room = rooms.get(roomCode);
       if (!room) return (cb as Function)({ error: 'Room not found' });
       if (room.players.length >= MAX_PLAYERS) return (cb as Function)({ error: 'Room full' });
-      if (room.players.find((p) => p.name === data.name)) {
+      if (room.players.find((p) => p.name.toLocaleLowerCase() === data.name.toLocaleLowerCase())) {
         return (cb as Function)({ error: 'Name taken' });
       }
 
-      const pid = randomUUID();
-      const token = randomUUID();
-      const joiningMidGame = !!room.game;
-      const player: Player = {
-        id: pid,
-        socketId: socket.id,
-        name: data.name.slice(0, 20),
-        team: null,
-        role: joiningMidGame ? 'spectator' : 'operative',
-        avatarId: nextAvatarId(room),
+      if (currentToken && room.blockedSessions.has(currentToken))
+        return (cb as Function)({ error: 'You are blocked from this room' });
+      if (room.accessMode === 'locked') return (cb as Function)({ error: 'Room is locked' });
+      const admit = (respond: (result: object) => void) => {
+        const error =
+          rooms.get(room.code) !== room
+            ? 'Room no longer exists'
+            : room.accessMode === 'locked'
+              ? 'Room is locked'
+              : room.players.length >= MAX_PLAYERS
+                ? 'Room full'
+                : room.players.some((p) => p.name.toLocaleLowerCase() === data.name.toLocaleLowerCase())
+                  ? 'Name taken'
+                  : currentToken && room.blockedSessions.has(currentToken)
+                    ? 'You are blocked from this room'
+                    : null;
+        if (error) return respond({ error });
+        const pid = randomUUID();
+        const token = randomUUID();
+        const joiningMidGame = !!room.game;
+        const player: Player = {
+          id: pid,
+          socketId: socket.id,
+          connected: true,
+          name: data.name,
+          team: null,
+          role: joiningMidGame ? 'spectator' : 'operative',
+          avatarId: nextAvatarId(room),
+        };
+        room.players.push(player);
+        currentRoom = room;
+        playerId = pid;
+        currentToken = token;
+        sessions.set(token, { playerId: pid, roomCode: room.code });
+        socket.join(room.code);
+        touchRoom(room);
+        respond({ code: room.code, inGame: joiningMidGame, sessionToken: token, playerId: pid });
+        broadcastLobby(io, room);
+        if (room.game) broadcastState(io, room);
       };
-      room.players.push(player);
-      currentRoom = room;
-      playerId = player.id;
-      sessions.set(token, { playerId: pid, roomCode: room.code });
-      socket.join(room.code);
-      (cb as Function)({ code: room.code, inGame: joiningMidGame, sessionToken: token, playerId: pid });
-      broadcastLobby(io, room);
-
-      if (room.game) {
-        broadcastState(io, room);
+      if (room.accessMode === 'approval') {
+        pending = true;
+        const id = requestAdmission(io, room, socket, data.name, (approved, reason) => {
+          pending = false;
+          if (approved) admit((result) => socket.emit('join-approved', result));
+          else socket.emit('join-rejected', reason ?? 'The host declined your request.');
+        });
+        if (!id) {
+          pending = false;
+          return (cb as Function)({ error: 'Too many pending requests. Try again later.' });
+        }
+        return (cb as Function)({ code: room.code, pending: true });
       }
+      admit(cb as (result: object) => void);
     });
   });
 
+  socket.on('set-access', (raw: unknown) =>
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      const data = safeParse(SetAccessSchema, raw);
+      if (!data) return;
+      currentRoom.accessMode = data.mode;
+      if (data.mode === 'locked') cancelRoomAdmissions(io, currentRoom);
+      broadcastLobby(io, currentRoom);
+    }),
+  );
+  socket.on('review-join', (raw: unknown) =>
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      const data = safeParse(ReviewJoinSchema, raw);
+      if (data) resolveAdmission(io, currentRoom, data.requestId, data.approve);
+    }),
+  );
+  socket.on('remove-player', (raw: unknown) =>
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      const data = safeParse(RemovePlayerSchema, raw);
+      if (!data || data.targetId === playerId) return;
+      const player = currentRoom.players.find((p) => p.id === data.targetId);
+      if (!player) return;
+      if (data.ban && currentRoom.blockedSessions.size >= MAX_BLOCKED_SESSIONS) {
+        socket.emit('error-msg', 'Block list full. Unblock someone or lock the room before removing more players.');
+        return;
+      }
+      if (data.ban)
+        for (const [token, session] of sessions) {
+          if (session.playerId === player.id)
+            currentRoom.blockedSessions.set(token, { id: player.id, name: player.name });
+        }
+      io.to(player.socketId).emit('removed-from-room', {
+        blocked: data.ban,
+        message: data.ban ? 'The host blocked you from this room.' : 'The host removed you from this room.',
+      });
+      removePlayer(io, currentRoom, player.id);
+    }),
+  );
+  socket.on('unblock-player', (raw: unknown) =>
+    guarded(() => {
+      if (!currentRoom || playerId !== currentRoom.host) return;
+      const data = safeParse(UnblockPlayerSchema, raw);
+      if (!data) return;
+      for (const [token, player] of currentRoom.blockedSessions)
+        if (player.id === data.targetId) currentRoom.blockedSessions.delete(token);
+      broadcastRoomControls(io, currentRoom);
+    }),
+  );
+
   socket.on('assign-team', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom) return;
+      if (!currentRoom || currentRoom.game || currentRoom.gameType !== 'classic') return;
       const data = safeParse(AssignTeamSchema, raw);
       if (!data) return;
+      if (data.targetId !== playerId && playerId !== currentRoom.host) return;
       const p = currentRoom.players.find((pl) => pl.id === data.targetId);
       if (!p) return;
       if (data.team !== undefined) {
@@ -428,13 +685,14 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         }
       }
       if (data.role !== undefined && p.team !== null) p.role = data.role;
+      if (p.role === 'spectator') p.team = null;
       broadcastLobby(io, currentRoom);
     });
   });
 
   socket.on('set-mode', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetModeSchema, raw);
       if (!data) return;
       currentRoom.mode = data.mode;
@@ -464,10 +722,13 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('assign-duet-slot', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || currentRoom.gameType !== 'duet') return;
+      if (!currentRoom || currentRoom.game || currentRoom.gameType !== 'duet') return;
       const data = safeParse(AssignTeamSchema, raw);
       if (!data) return;
       const targetId = data.targetId;
+      if (targetId !== playerId && playerId !== currentRoom.host) return;
+      const occupant = data.team === 'red' ? currentRoom.playerA : data.team === 'blue' ? currentRoom.playerB : null;
+      if (occupant && occupant !== targetId && playerId !== currentRoom.host) return;
       const p = currentRoom.players.find((pl) => pl.id === targetId);
       if (!p) return;
       const slot = data.team;
@@ -495,7 +756,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-category', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetCategorySchema, raw);
       if (!data) return;
       currentRoom.categoryId = data.categoryId;
@@ -507,7 +768,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-timeout', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetTimeoutSchema, raw);
       if (!data) return;
       currentRoom.turnTimeout = data.seconds;
@@ -517,7 +778,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-wordlist', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetWordlistSchema, raw);
       if (!data) return;
       if (!data.words || data.words.length === 0) {
@@ -542,9 +803,14 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('start-game', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
+      if (currentRoom.game) return;
 
       if (currentRoom.gameType === 'duet') {
-        if (!currentRoom.playerA || !currentRoom.playerB) {
+        if (
+          ![currentRoom.playerA, currentRoom.playerB].every((id) =>
+            currentRoom!.players.some((p) => p.id === id && p.connected),
+          )
+        ) {
           socket.emit('error-msg', 'Need 2 players assigned to Player A and Player B');
           return;
         }
@@ -557,15 +823,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return;
       }
 
-      const reds = currentRoom.players.filter((p) => p.team === 'red');
-      const blues = currentRoom.players.filter((p) => p.team === 'blue');
-      const minPerTeam = process.env.NODE_ENV === 'development' ? 1 : 2;
-      if (reds.length < minPerTeam || blues.length < minPerTeam) {
-        socket.emit('error-msg', `Each team needs at least ${minPerTeam} players`);
-        return;
-      }
-      if (!reds.find((p) => p.role === 'spymaster') || !blues.find((p) => p.role === 'spymaster')) {
-        socket.emit('error-msg', 'Each team needs a spymaster');
+      if (!classicReady(currentRoom)) {
+        socket.emit('error-msg', 'Each team needs exactly one spymaster and at least one operative');
         return;
       }
       const words = getWordsForGame(currentRoom.categoryId, currentRoom.difficulty, currentRoom.customWords);
@@ -579,6 +838,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('give-clue', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
+      if (currentRoom.pause) return socket.emit('error-msg', 'Game paused while a player reconnects.');
       const data = safeParse(GiveClueSchema, raw);
       if (!data) return socket.emit('error-msg', 'Invalid clue');
 
@@ -605,6 +866,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('cast-vote', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
+      if (currentRoom.pause) return socket.emit('error-msg', 'Game paused while a player reconnects.');
       if (isDuetGame(currentRoom.game)) return;
       const classic = currentRoom.game as GameState;
       const me = currentRoom.players.find((p) => p.id === playerId);
@@ -622,6 +885,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('make-guess', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
+      if (currentRoom.pause) return socket.emit('error-msg', 'Game paused while a player reconnects.');
       const data = safeParse(CardIndexSchema, raw);
       if (!data) return;
 
@@ -645,11 +910,15 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const me = currentRoom.players.find((p) => p.id === playerId);
       if (!me || !me.team) return;
       const solo = isSoloOnTeam(currentRoom, me);
-      if (me.role !== 'operative' && !solo) return;
+      if (me.role !== 'operative') return;
       if (classic.currentTeam !== me.team) return;
       if (classic.phase !== 'operative') return;
       if (!solo) {
-        const majority = getVoteMajority(classic);
+        const eligible = currentRoom.players.filter((p) => p.connected && p.team === me.team && p.role === 'operative');
+        const majority = getVoteMajority(
+          classic,
+          eligible.map((p) => p.id),
+        );
         if (majority === null || majority !== data.cardIndex) {
           return socket.emit('error-msg', 'No majority vote on that card');
         }
@@ -667,6 +936,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('end-turn', () => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
+      if (currentRoom.pause) return socket.emit('error-msg', 'Game paused while a player reconnects.');
 
       if (isDuetGame(currentRoom.game)) {
         const side = getDuetSide(currentRoom, playerId!);
@@ -683,7 +954,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
       const classic = currentRoom.game as GameState;
       const me = currentRoom.players.find((p) => p.id === playerId);
-      if (!me || !me.team) return;
+      if (!me || !me.team || me.role !== 'operative') return;
       const result = endTurn(classic, me.team);
       if ('error' in result) return socket.emit('error-msg', result.error);
       setDeadline(classic, currentRoom.turnTimeout * 1000);
@@ -699,7 +970,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const me = currentRoom.players.find((p) => p.id === playerId);
       if (!me) return;
       const msg: ChatMessage = {
-        id: `${Date.now()}-${playerId}`,
+        id: randomUUID(),
         name: me.name,
         team: me.team,
         text: data.text.slice(0, 200),
@@ -714,10 +985,15 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('play-again', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom.game?.winner) return;
       clearRoomTimer(currentRoom);
 
       if (currentRoom.gameType === 'duet') {
-        if (!currentRoom.playerA || !currentRoom.playerB) {
+        if (
+          ![currentRoom.playerA, currentRoom.playerB].every((id) =>
+            currentRoom!.players.some((p) => p.id === id && p.connected),
+          )
+        ) {
           currentRoom.game = null;
           broadcastLobby(io, currentRoom);
           return;
@@ -730,11 +1006,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return;
       }
 
-      const reds = currentRoom.players.filter((p) => p.team === 'red');
-      const blues = currentRoom.players.filter((p) => p.team === 'blue');
-      const hasTeams = reds.length >= 1 && blues.length >= 1;
-      const hasSpymasters = !!reds.find((p) => p.role === 'spymaster') && !!blues.find((p) => p.role === 'spymaster');
-      if (!hasTeams || !hasSpymasters) {
+      if (!classicReady(currentRoom)) {
         currentRoom.game = null;
         broadcastLobby(io, currentRoom);
         return;
@@ -750,77 +1022,35 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('back-to-lobby', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
-      clearRoomTimer(currentRoom);
-      currentRoom.game = null;
-      broadcastLobby(io, currentRoom);
+      returnToLobby(io, currentRoom);
     });
   });
 
   socket.on('leave-room', () => {
-    if (!currentRoom || !playerId) return;
+    cancelSocketAdmission(io, socket.id);
+    if (!currentRoom || !playerId || !ownsSession()) return;
     const room = currentRoom;
     const pid = playerId;
-
-    cancelDisconnectTimer(pid);
-    deleteSessionsForPlayer(pid);
-    socket.leave(room.code);
-
-    room.players = room.players.filter((p) => p.id !== pid);
-    if (room.playerA === pid) room.playerA = null;
-    if (room.playerB === pid) room.playerB = null;
-
     currentRoom = null;
     playerId = null;
-
     socket.emit('session-expired');
-
-    if (room.players.length === 0) {
-      clearRoomTimer(room);
-      rooms.delete(room.code);
-      return;
-    }
-    if (room.host === pid) room.host = room.players[0]!.id;
-    broadcastLobby(io, room);
-    if (room.game) broadcastState(io, room);
+    removePlayer(io, room, pid);
   });
 
   socket.on('disconnect', () => {
-    if (!currentRoom || !playerId) return;
+    cancelSocketAdmission(io, socket.id);
+    if (!currentRoom || !playerId || !ownsSession()) return;
     const room = currentRoom;
     const pid = playerId;
-
-    const player = room.players.find((p) => p.id === pid);
-    if (player && player.socketId !== socket.id) return;
-
-    const hasSession = [...sessions.values()].some((s) => s.playerId === pid);
-    if (!hasSession) {
-      room.players = room.players.filter((p) => p.id !== pid);
-      if (room.players.length === 0) {
-        clearRoomTimer(room);
-        rooms.delete(room.code);
-        return;
-      }
-      if (room.host === pid) room.host = room.players[0]!.id;
-      broadcastLobby(io, room);
-      if (room.game) broadcastState(io, room);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      disconnectTimers.delete(pid);
-      deleteSessionsForPlayer(pid);
-      room.players = room.players.filter((p) => p.id !== pid);
-      if (room.players.length === 0) {
-        clearRoomTimer(room);
-        rooms.delete(room.code);
-        return;
-      }
-      if (room.host === pid) room.host = room.players[0]!.id;
-      if (room.playerA === pid) room.playerA = null;
-      if (room.playerB === pid) room.playerB = null;
-      broadcastLobby(io, room);
-      if (room.game) broadcastState(io, room);
-    }, DISCONNECT_GRACE_MS);
+    const player = room.players.find((p) => p.id === pid)!;
+    // Apply an already elapsed deadline before preserving the clock.
+    expireTurn(io, room);
+    player.connected = false;
+    removeVotes(room, pid);
+    updatePause(io, room);
+    broadcastLobby(io, room);
+    if (room.game) broadcastState(io, room);
+    const timer = setTimeout(() => removePlayer(io, room, pid), DISCONNECT_GRACE_MS);
     disconnectTimers.set(pid, timer);
   });
 }
