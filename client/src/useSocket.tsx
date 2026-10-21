@@ -25,7 +25,7 @@ export interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue | null>(null);
 
 function setSessionCookie(token: string) {
-  document.cookie = `keknames_session=${token}; path=/; max-age=86400; SameSite=Lax`;
+  document.cookie = `keknames_session=${token}; path=/; max-age=86400; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
 }
 
 function clearSessionCookie() {
@@ -47,6 +47,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const socket = io();
     socketRef.current = socket;
+    let errorTimer: ReturnType<typeof setTimeout>;
+
+    function resetRoom() {
+      setMyId(null);
+      setLobbyState(null);
+      setGameState(null);
+      setChatMessages([]);
+      setWordlistStatus(null);
+      setScreen('landing');
+    }
 
     socket.on('connect', () => {
       everConnected.current = true;
@@ -62,19 +72,23 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     socket.on('session-expired', () => {
       clearSessionCookie();
-      setMyId(null);
-      setScreen('landing');
+      resetRoom();
+    });
+
+    socket.on('session-replaced', () => {
+      // The new tab shares the cookie; clearing it would break its reconnection.
+      everConnected.current = false;
+      resetRoom();
+      clearTimeout(errorTimer);
+      setError('This session is active in another tab. Reload to continue here.');
     });
 
     socket.on('lobby-state', (state: LobbyState) => {
       setLobbyState(state);
-      setGameState((prev) => {
-        if (prev && !state.inGame) {
-          setScreen('lobby');
-          setChatMessages([]);
-        }
-        return prev;
-      });
+      if (!state.inGame) {
+        setGameState(null);
+        setScreen('lobby');
+      }
     });
 
     socket.on('game-state', (state: GameViewPayload) => {
@@ -86,7 +100,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socket.on('chat-message', (msg: ChatMessage) => {
       setChatMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
+        return [...prev, msg].slice(-200);
       });
     });
 
@@ -94,54 +108,68 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     socket.on('error-msg', (msg: string) => {
       setError(msg);
-      setTimeout(() => setError(null), 4000);
+      clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => setError(null), 4000);
     });
 
     return () => {
+      clearTimeout(errorTimer);
       socket.disconnect();
     };
   }, []);
 
   const createRoom = useCallback((name: string) => {
     return new Promise<{ code: string; playerId: string }>((resolve, reject) => {
-      socketRef.current!.emit(
-        'create-room',
-        { name },
-        (res: { error?: string; code?: string; playerId?: string; sessionToken?: string }) => {
-          if (res.error) {
-            reject(res.error);
-            return;
-          }
-          setMyId(res.playerId!);
-          if (res.sessionToken) setSessionCookie(res.sessionToken);
-          setScreen('lobby');
-          resolve(res as { code: string; playerId: string });
-        },
-      );
+      if (!socketRef.current?.connected) return reject('Not connected. Please try again once reconnected.');
+      socketRef.current
+        .timeout(8000)
+        .emit(
+          'create-room',
+          { name },
+          (err: Error | null, res: { error?: string; code?: string; playerId?: string; sessionToken?: string }) => {
+            if (err) return reject('Request timed out. Please try again.');
+            if (res.error) {
+              reject(res.error);
+              return;
+            }
+            setMyId(res.playerId!);
+            if (res.sessionToken) setSessionCookie(res.sessionToken);
+            setScreen('lobby');
+            resolve(res as { code: string; playerId: string });
+          },
+        );
     });
   }, []);
 
   const joinRoom = useCallback((code: string, name: string) => {
     return new Promise<{ code: string; playerId: string; inGame: boolean }>((resolve, reject) => {
-      socketRef.current!.emit(
-        'join-room',
-        { code, name },
-        (res: { error?: string; code?: string; playerId?: string; sessionToken?: string; inGame?: boolean }) => {
-          if (res.error) {
-            reject(res.error);
-            return;
-          }
-          setMyId(res.playerId!);
-          if (res.sessionToken) setSessionCookie(res.sessionToken);
-          setScreen(res.inGame ? 'game' : 'lobby');
-          resolve(res as { code: string; playerId: string; inGame: boolean });
-        },
-      );
+      if (!socketRef.current?.connected) return reject('Not connected. Please try again once reconnected.');
+      socketRef.current
+        .timeout(8000)
+        .emit(
+          'join-room',
+          { code, name },
+          (
+            err: Error | null,
+            res: { error?: string; code?: string; playerId?: string; sessionToken?: string; inGame?: boolean },
+          ) => {
+            if (err) return reject('Request timed out. Please try again.');
+            if (res.error) {
+              reject(res.error);
+              return;
+            }
+            setMyId(res.playerId!);
+            if (res.sessionToken) setSessionCookie(res.sessionToken);
+            setScreen(res.inGame ? 'game' : 'lobby');
+            resolve(res as { code: string; playerId: string; inGame: boolean });
+          },
+        );
     });
   }, []);
 
   const emit = useCallback((event: string, data?: unknown) => {
-    socketRef.current?.emit(event, data);
+    if (socketRef.current?.connected) socketRef.current.emit(event, data);
+    else setError('Disconnected. Wait for reconnection before playing.');
   }, []);
 
   const leaveRoom = useCallback(() => {

@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import type { z } from 'zod';
+import { windowLimiter } from './rate-limit';
 import {
   createGame,
   processGuess,
@@ -39,6 +40,7 @@ import {
 } from './types';
 
 const rooms = new Map<string, Room>();
+const allowAdmission = windowLimiter(120, 60_000);
 
 const roomTimers = new Map<string, ReturnType<typeof setInterval>>();
 const roomLastActivity = new Map<string, number>();
@@ -52,7 +54,8 @@ const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DISCONNECT_GRACE_MS = 60_000;
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const ROOM_CODE_LEN = 4;
+const ROOM_CODE_LEN = 6;
+const MAX_ROOMS = 1000;
 const MAX_PLAYERS = 10;
 const MAX_CHAT_LOG = 200;
 const MAX_AVATAR_ID = 8;
@@ -136,6 +139,7 @@ function createRoom(): Room {
     chatLog: [],
   };
   rooms.set(code, room);
+  touchRoom(room);
   return room;
 }
 
@@ -154,7 +158,26 @@ function getDuetSide(room: Room, pid: string): DuetSide | null {
 }
 
 function isSoloOnTeam(room: Room, player: Player): boolean {
-  return player.team !== null && room.players.filter((p) => p.team === player.team).length === 1;
+  return (
+    player.role === 'operative' &&
+    player.team !== null &&
+    room.players.filter((p) => p.team === player.team && p.role === 'operative').length === 1
+  );
+}
+
+function classicReady(room: Room): boolean {
+  return (['red', 'blue'] as const).every((team) => {
+    const players = room.players.filter((p) => p.team === team);
+    return players.filter((p) => p.role === 'spymaster').length === 1 && players.some((p) => p.role === 'operative');
+  });
+}
+
+function removeVotes(room: Room, pid: string): void {
+  if (!room.game || !isClassicGame(room.game)) return;
+  for (const [index, voters] of Object.entries(room.game.votes)) {
+    room.game.votes[index] = voters.filter((id) => id !== pid);
+    if (!room.game.votes[index]!.length) delete room.game.votes[index];
+  }
 }
 
 function buildRoomMeta(room: Room) {
@@ -206,6 +229,7 @@ function broadcastState(io: Server, room: Room): void {
     const view = getPlayerView(classic, p.role);
     io.to(p.socketId).emit('game-state', {
       ...view,
+      votes: p.team === classic.currentTeam ? view.votes : {},
       roomCode: room.code,
       chatLog: room.chatLog,
       playerAvatars: avatarMap,
@@ -260,19 +284,23 @@ function startRoomTimer(io: Server, room: Room): void {
   clearRoomTimer(room);
   if (room.turnTimeout === 0) return;
   const interval = setInterval(() => {
-    const game = room.game;
-    if (!game || game.winner || game.turnDeadline === null) return;
-    if (Date.now() < game.turnDeadline) return;
-    if (isDuetGame(game)) {
-      skipDuetTurn(game);
-      if (!game.winner) setDuetDeadline(game, room.turnTimeout * 1000);
-    } else {
-      switchTurn(game);
-      setDeadline(game, room.turnTimeout * 1000);
-    }
-    broadcastState(io, room);
+    expireTurn(io, room);
   }, 1_000);
   roomTimers.set(room.code, interval);
+}
+
+function expireTurn(io: Server, room: Room): boolean {
+  const game = room.game;
+  if (!game || game.winner || game.turnDeadline === null || Date.now() < game.turnDeadline) return false;
+  if (isDuetGame(game)) {
+    skipDuetTurn(game);
+    setDuetDeadline(game, game.winner ? 0 : room.turnTimeout * 1000);
+  } else {
+    switchTurn(game);
+    setDeadline(game, room.turnTimeout * 1000);
+  }
+  broadcastState(io, room);
+  return true;
 }
 
 function safeParse<T>(schema: z.ZodType<T>, data: unknown): T | null {
@@ -311,7 +339,20 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   let currentRoom: Room | null = null;
   let playerId: string | null = null;
 
+  function ownsSession(): boolean {
+    return (
+      !!currentRoom &&
+      rooms.get(currentRoom.code) === currentRoom &&
+      currentRoom.players.some((p) => p.id === playerId && p.socketId === socket.id)
+    );
+  }
+
   function guarded(handler: () => void): void {
+    if (currentRoom && rooms.get(currentRoom.code) !== currentRoom) {
+      currentRoom = null;
+      playerId = null;
+    }
+    if (currentRoom && !ownsSession()) return;
     if (!checkRateLimit(socket)) {
       socket.emit('error-msg', 'Rate limit exceeded');
       return;
@@ -330,7 +371,13 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const player = room?.players.find((p) => p.id === session.playerId);
       if (room && player) {
         cancelDisconnectTimer(player.id);
+        const previousSocket = io.sockets.sockets.get(player.socketId);
         player.socketId = socket.id;
+        if (previousSocket && previousSocket.id !== socket.id) {
+          previousSocket.emit('session-replaced');
+          previousSocket.leave(room.code);
+          previousSocket.disconnect(true);
+        }
         currentRoom = room;
         playerId = player.id;
         socket.join(room.code);
@@ -342,6 +389,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         sessions.delete(incomingToken);
         socket.emit('session-expired');
       }
+    } else {
+      socket.emit('session-expired');
     }
   }
 
@@ -349,8 +398,11 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     if (typeof cb !== 'function') return;
     guarded(() => {
       if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
+      if (!allowAdmission(socket.handshake.address))
+        return (cb as Function)({ error: 'Too many room requests. Try again in a minute.' });
       const data = safeParse(CreateRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
+      if (rooms.size >= MAX_ROOMS) return (cb as Function)({ error: 'Server full. Please try again later.' });
       const room = createRoom();
       const pid = randomUUID();
       const token = randomUUID();
@@ -377,13 +429,15 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     if (typeof cb !== 'function') return;
     guarded(() => {
       if (currentRoom) return (cb as Function)({ error: 'Already in a room' });
+      if (!allowAdmission(socket.handshake.address))
+        return (cb as Function)({ error: 'Too many room requests. Try again in a minute.' });
       const data = safeParse(JoinRoomSchema, raw);
       if (!data) return (cb as Function)({ error: 'Invalid input' });
       const roomCode = data.code.toUpperCase();
       const room = rooms.get(roomCode);
       if (!room) return (cb as Function)({ error: 'Room not found' });
       if (room.players.length >= MAX_PLAYERS) return (cb as Function)({ error: 'Room full' });
-      if (room.players.find((p) => p.name === data.name)) {
+      if (room.players.find((p) => p.name.toLocaleLowerCase() === data.name.toLocaleLowerCase())) {
         return (cb as Function)({ error: 'Name taken' });
       }
 
@@ -414,9 +468,10 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('assign-team', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom) return;
+      if (!currentRoom || currentRoom.game || currentRoom.gameType !== 'classic') return;
       const data = safeParse(AssignTeamSchema, raw);
       if (!data) return;
+      if (data.targetId !== playerId && playerId !== currentRoom.host) return;
       const p = currentRoom.players.find((pl) => pl.id === data.targetId);
       if (!p) return;
       if (data.team !== undefined) {
@@ -428,13 +483,14 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         }
       }
       if (data.role !== undefined && p.team !== null) p.role = data.role;
+      if (p.role === 'spectator') p.team = null;
       broadcastLobby(io, currentRoom);
     });
   });
 
   socket.on('set-mode', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetModeSchema, raw);
       if (!data) return;
       currentRoom.mode = data.mode;
@@ -464,10 +520,13 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('assign-duet-slot', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || currentRoom.gameType !== 'duet') return;
+      if (!currentRoom || currentRoom.game || currentRoom.gameType !== 'duet') return;
       const data = safeParse(AssignTeamSchema, raw);
       if (!data) return;
       const targetId = data.targetId;
+      if (targetId !== playerId && playerId !== currentRoom.host) return;
+      const occupant = data.team === 'red' ? currentRoom.playerA : data.team === 'blue' ? currentRoom.playerB : null;
+      if (occupant && occupant !== targetId && playerId !== currentRoom.host) return;
       const p = currentRoom.players.find((pl) => pl.id === targetId);
       if (!p) return;
       const slot = data.team;
@@ -495,7 +554,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-category', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetCategorySchema, raw);
       if (!data) return;
       currentRoom.categoryId = data.categoryId;
@@ -507,7 +566,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-timeout', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetTimeoutSchema, raw);
       if (!data) return;
       currentRoom.turnTimeout = data.seconds;
@@ -517,7 +576,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on('set-wordlist', (raw: unknown) => {
     guarded(() => {
-      if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom || currentRoom.game || playerId !== currentRoom.host) return;
       const data = safeParse(SetWordlistSchema, raw);
       if (!data) return;
       if (!data.words || data.words.length === 0) {
@@ -542,6 +601,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('start-game', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
+      if (currentRoom.game) return;
 
       if (currentRoom.gameType === 'duet') {
         if (!currentRoom.playerA || !currentRoom.playerB) {
@@ -557,15 +617,8 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return;
       }
 
-      const reds = currentRoom.players.filter((p) => p.team === 'red');
-      const blues = currentRoom.players.filter((p) => p.team === 'blue');
-      const minPerTeam = process.env.NODE_ENV === 'development' ? 1 : 2;
-      if (reds.length < minPerTeam || blues.length < minPerTeam) {
-        socket.emit('error-msg', `Each team needs at least ${minPerTeam} players`);
-        return;
-      }
-      if (!reds.find((p) => p.role === 'spymaster') || !blues.find((p) => p.role === 'spymaster')) {
-        socket.emit('error-msg', 'Each team needs a spymaster');
+      if (!classicReady(currentRoom)) {
+        socket.emit('error-msg', 'Each team needs exactly one spymaster and at least one operative');
         return;
       }
       const words = getWordsForGame(currentRoom.categoryId, currentRoom.difficulty, currentRoom.customWords);
@@ -579,6 +632,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('give-clue', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
       const data = safeParse(GiveClueSchema, raw);
       if (!data) return socket.emit('error-msg', 'Invalid clue');
 
@@ -605,6 +659,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('cast-vote', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
       if (isDuetGame(currentRoom.game)) return;
       const classic = currentRoom.game as GameState;
       const me = currentRoom.players.find((p) => p.id === playerId);
@@ -622,6 +677,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('make-guess', (raw: unknown) => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
       const data = safeParse(CardIndexSchema, raw);
       if (!data) return;
 
@@ -645,11 +701,15 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const me = currentRoom.players.find((p) => p.id === playerId);
       if (!me || !me.team) return;
       const solo = isSoloOnTeam(currentRoom, me);
-      if (me.role !== 'operative' && !solo) return;
+      if (me.role !== 'operative') return;
       if (classic.currentTeam !== me.team) return;
       if (classic.phase !== 'operative') return;
       if (!solo) {
-        const majority = getVoteMajority(classic);
+        const eligible = currentRoom.players.filter((p) => p.team === me.team && p.role === 'operative');
+        const majority = getVoteMajority(
+          classic,
+          eligible.map((p) => p.id),
+        );
         if (majority === null || majority !== data.cardIndex) {
           return socket.emit('error-msg', 'No majority vote on that card');
         }
@@ -667,6 +727,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('end-turn', () => {
     guarded(() => {
       if (!currentRoom?.game) return;
+      if (expireTurn(io, currentRoom)) return socket.emit('error-msg', 'Time is up. Your action was not applied.');
 
       if (isDuetGame(currentRoom.game)) {
         const side = getDuetSide(currentRoom, playerId!);
@@ -683,7 +744,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
       const classic = currentRoom.game as GameState;
       const me = currentRoom.players.find((p) => p.id === playerId);
-      if (!me || !me.team) return;
+      if (!me || !me.team || me.role !== 'operative') return;
       const result = endTurn(classic, me.team);
       if ('error' in result) return socket.emit('error-msg', result.error);
       setDeadline(classic, currentRoom.turnTimeout * 1000);
@@ -699,7 +760,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       const me = currentRoom.players.find((p) => p.id === playerId);
       if (!me) return;
       const msg: ChatMessage = {
-        id: `${Date.now()}-${playerId}`,
+        id: randomUUID(),
         name: me.name,
         team: me.team,
         text: data.text.slice(0, 200),
@@ -714,6 +775,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   socket.on('play-again', () => {
     guarded(() => {
       if (!currentRoom || playerId !== currentRoom.host) return;
+      if (!currentRoom.game?.winner) return;
       clearRoomTimer(currentRoom);
 
       if (currentRoom.gameType === 'duet') {
@@ -730,11 +792,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
         return;
       }
 
-      const reds = currentRoom.players.filter((p) => p.team === 'red');
-      const blues = currentRoom.players.filter((p) => p.team === 'blue');
-      const hasTeams = reds.length >= 1 && blues.length >= 1;
-      const hasSpymasters = !!reds.find((p) => p.role === 'spymaster') && !!blues.find((p) => p.role === 'spymaster');
-      if (!hasTeams || !hasSpymasters) {
+      if (!classicReady(currentRoom)) {
         currentRoom.game = null;
         broadcastLobby(io, currentRoom);
         return;
@@ -757,7 +815,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
   });
 
   socket.on('leave-room', () => {
-    if (!currentRoom || !playerId) return;
+    if (!currentRoom || !playerId || !ownsSession()) return;
     const room = currentRoom;
     const pid = playerId;
 
@@ -766,6 +824,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     socket.leave(room.code);
 
     room.players = room.players.filter((p) => p.id !== pid);
+    removeVotes(room, pid);
     if (room.playerA === pid) room.playerA = null;
     if (room.playerB === pid) room.playerB = null;
 
@@ -776,6 +835,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
 
     if (room.players.length === 0) {
       clearRoomTimer(room);
+      roomLastActivity.delete(room.code);
       rooms.delete(room.code);
       return;
     }
@@ -790,13 +850,16 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
     const pid = playerId;
 
     const player = room.players.find((p) => p.id === pid);
-    if (player && player.socketId !== socket.id) return;
+    if (!player || !ownsSession()) return;
+    removeVotes(room, pid);
+    if (room.game) broadcastState(io, room);
 
     const hasSession = [...sessions.values()].some((s) => s.playerId === pid);
     if (!hasSession) {
       room.players = room.players.filter((p) => p.id !== pid);
       if (room.players.length === 0) {
         clearRoomTimer(room);
+        roomLastActivity.delete(room.code);
         rooms.delete(room.code);
         return;
       }
@@ -812,6 +875,7 @@ export function setupRoomHandlers(io: Server, socket: Socket): void {
       room.players = room.players.filter((p) => p.id !== pid);
       if (room.players.length === 0) {
         clearRoomTimer(room);
+        roomLastActivity.delete(room.code);
         rooms.delete(room.code);
         return;
       }

@@ -74,7 +74,7 @@ export default function Landing() {
   const [name, setName] = useState("");
   const [code, setCode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return (params.get("room") || "").toUpperCase().slice(0, 4);
+    return (params.get("room") || "").toUpperCase().slice(0, 6);
   });
   const [err, setErr] = useState("");
   const [hasRoomFromUrl, setHasRoomFromUrl] = useState(() => {
@@ -146,7 +146,7 @@ export default function Landing() {
                 <input
                   type="text"
                   placeholder="ROOM CODE"
-                  maxLength={4}
+                  maxLength={6}
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleJoin()}

@@ -227,7 +227,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick }:
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(card.content, x + w / 2, y + h / 2);
+        ctx.fillText(card.content, x + w / 2, y + h / 2, Math.max(1, w - 12));
       }
     },
     [],
@@ -272,7 +272,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick }:
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const label = s.mode === 'pictures' ? card.content.replace('card_', '#') : card.content;
-      ctx.fillText(label, x + w / 2, y + h - labelH / 2);
+      ctx.fillText(label, x + w / 2, y + h - labelH / 2, Math.max(1, w - 12));
       ctx.restore();
 
       ctx.strokeStyle = colors.border;
@@ -483,7 +483,7 @@ export default function Board({ gameState, isSpymaster, voteInfo, onCardClick }:
         s.hoverIndex = idx;
         draw();
       }
-      canvas!.style.cursor = idx >= 0 && s.cards[idx] && !s.cards[idx]!.revealed ? 'pointer' : 'default';
+      canvas!.style.cursor = onCardClick && idx >= 0 && s.cards[idx] && !s.cards[idx]!.revealed ? 'pointer' : 'default';
     }
 
     function handleMouseLeave() {

@@ -123,6 +123,7 @@ export interface DuetCard {
   readonly typeB: DuetCardType;
   revealed: boolean;
   revealedType: DuetCardType | null;
+  neutralFor: DuetSide[];
 }
 
 export interface DuetState {
@@ -195,6 +196,7 @@ export interface DuetCardView {
   readonly typeB?: DuetCardType;
   readonly myType?: DuetCardType | null;
   readonly revealedType: DuetCardType | null;
+  readonly neutralFor: readonly DuetSide[];
 }
 
 export interface PlayerView {

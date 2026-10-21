@@ -125,6 +125,7 @@ export interface DuetCard {
   readonly typeB: DuetCardType;
   revealed: boolean;
   revealedType: DuetCardType | null;
+  neutralFor: DuetSide[];
 }
 
 export interface DuetState {
@@ -232,6 +233,7 @@ export const SetModeSchema = z.object({
 
 export const SetCategorySchema = z.object({
   categoryId: z.enum([
+    'standard',
     'observability',
     'buzzwords',
     'influencers',
@@ -248,6 +250,10 @@ export const SetCategorySchema = z.object({
     'australia',
     'friends',
     'seinfeld',
+    'dnd',
+    'nineties',
+    'fastfood',
+    'pokemon',
     'custom',
   ]),
   difficulty: z.enum(['easy', 'hard']),

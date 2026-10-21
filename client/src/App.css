@@ -1655,3 +1655,16 @@ select option {
   color: var(--danger);
   border-color: var(--danger);
 }
+/* Duet cards are native buttons so keyboard users can make guesses too. */
+.duet-card {
+  font-family: inherit;
+  flex-direction: column;
+  gap: 4px;
+}
+.duet-card:disabled {
+  cursor: default;
+}
+.duet-card:focus-visible {
+  outline: 3px solid #f39c12;
+  outline-offset: 2px;
+}
